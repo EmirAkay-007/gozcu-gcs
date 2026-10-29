@@ -1,10 +1,12 @@
 import asyncio
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
-from gcs.config import Config, RecordingConfig
+from gcs.config import Config, RecordingConfig, VideoConfig
 from gcs.server import Client, Hub, create_app, encode, hello_message, make_publish
 
 EVENT = {"type": "event", "time": 1.0, "source": "link", "severity": "INFO", "text": "hello"}
@@ -15,7 +17,9 @@ SNAPSHOT = {
     "link": {"state": "CONNECTED", "connection": "tcp:127.0.0.1:5762", "vehicle": None},
     "fields": {},
 }
+VIDEO = {"type": "video", "time": 1.0, "state": "LIVE", "reason": None}
 NOT_RECORDING = RecordingConfig(enabled=False)
+VIDEO_ON = VideoConfig()
 
 
 class FakeSource:
@@ -32,18 +36,49 @@ class FakeSource:
         self.running = False
 
 
-def make_app(recording=NOT_RECORDING):
-    sources = []
+class FakeVideo:
+    """Stands in for VideoSource: the test publishes frames through it."""
 
-    def factory(config, publish):
+    def __init__(self, config, recording, publish, publish_frame):
+        self.publish = publish
+        self.publish_frame = publish_frame
+        self.running = False
+        self.recording_requests = []
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def set_recording(self, on):
+        self.recording_requests.append(on)
+
+
+def make_app(recording=NOT_RECORDING, video=VIDEO_ON):
+    sources, videos = [], []
+
+    def source_factory(config, publish):
         sources.append(FakeSource(config, publish))
         return sources[-1]
 
-    return create_app(Config(recording=recording), source_factory=factory), sources
+    def video_factory(*args):
+        videos.append(FakeVideo(*args))
+        return videos[-1]
+
+    config = Config(recording=recording, video=video)
+    return create_app(config, source_factory, video_factory), sources, videos
+
+
+def wait_until(condition, timeout_s=5.0):
+    deadline = time.monotonic() + timeout_s
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.01)
 
 
 def test_a_browser_gets_the_field_list_then_live_data():
-    app, sources = make_app()
+    app, sources, _ = make_app()
     with TestClient(app) as client, client.websocket_connect("/ws") as ws:
         hello = ws.receive_json()
         assert hello["type"] == "hello"
@@ -57,27 +92,32 @@ def test_a_browser_gets_the_field_list_then_live_data():
         assert ws.receive_json() == SNAPSHOT
 
 
-def test_a_late_browser_gets_the_recent_events_and_the_newest_snapshot():
-    app, sources = make_app()
+def test_a_late_browser_gets_the_recent_events_and_the_newest_states():
+    app, sources, videos = make_app()
     with TestClient(app) as client:
         sources[0].publish(EVENT)
         sources[0].publish(SNAPSHOT)
-        client.get("/")  # a round trip through the event loop, which delivers both first
+        videos[0].publish({**VIDEO, "state": "STARTING"})
+        videos[0].publish(VIDEO)  # replaces the one before
+        client.get("/")  # a round trip through the event loop, which delivers them first
         with client.websocket_connect("/ws") as ws:
             assert ws.receive_json()["type"] == "hello"
             assert ws.receive_json() == EVENT
             assert ws.receive_json() == SNAPSHOT
+            assert ws.receive_json() == VIDEO
 
 
-def test_the_source_runs_as_long_as_the_server():
-    app, sources = make_app()
+def test_the_sources_run_as_long_as_the_server():
+    app, sources, videos = make_app()
     with TestClient(app):
         assert sources[0].running
+        assert videos[0].running
     assert not sources[0].running
+    assert not videos[0].running
 
 
 def test_the_page_is_served_and_does_not_hide_the_websocket():
-    app, _ = make_app()
+    app, _, _ = make_app()
     with TestClient(app) as client:
         page = client.get("/")
         script = client.get("/js/transport.js")
@@ -88,10 +128,11 @@ def test_the_page_is_served_and_does_not_hide_the_websocket():
 
 
 def test_a_session_is_recorded_to_a_file(tmp_path):
-    app, sources = make_app(RecordingConfig(directory=str(tmp_path)))
+    app, sources, videos = make_app(RecordingConfig(directory=str(tmp_path)))
     with TestClient(app):
         sources[0].publish(EVENT)
         sources[0].publish(SNAPSHOT)
+        videos[0].publish(VIDEO)  # a status, not kept: what changes in it is also an event
     (path,) = tmp_path.glob("*.jsonl")
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [line["type"] for line in lines] == ["session", "event", "event", "values"]
@@ -102,7 +143,7 @@ def test_a_session_is_recorded_to_a_file(tmp_path):
 def test_the_station_runs_on_when_it_cannot_record(tmp_path):
     blocker = tmp_path / "a file"
     blocker.write_text("", encoding="utf-8")
-    app, _ = make_app(RecordingConfig(directory=str(blocker / "logs")))  # cannot be created
+    app, _, _ = make_app(RecordingConfig(directory=str(blocker / "logs")))  # cannot be created
     with TestClient(app) as client, client.websocket_connect("/ws") as ws:
         assert ws.receive_json()["type"] == "hello"
         warning = ws.receive_json()
@@ -110,19 +151,88 @@ def test_the_station_runs_on_when_it_cannot_record(tmp_path):
     assert warning["text"].startswith("not recording:")
 
 
-def test_a_slow_browser_skips_snapshots_but_keeps_every_event():
+def test_video_frames_reach_every_browser_watching():
+    app, _, videos = make_app()
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/ws/video") as first,
+        client.websocket_connect("/ws/video") as second,
+    ):
+        client.get("/")  # both have joined
+        videos[0].publish_frame(b"\xff\xd8frame\xff\xd9")
+        assert first.receive_bytes() == b"\xff\xd8frame\xff\xd9"
+        assert second.receive_bytes() == b"\xff\xd8frame\xff\xd9"
+
+
+def test_a_late_viewer_starts_with_the_newest_frame():
+    app, _, videos = make_app()
+    with TestClient(app) as client:
+        videos[0].publish_frame(b"old")
+        videos[0].publish_frame(b"new")
+        client.get("/")
+        with client.websocket_connect("/ws/video") as ws:
+            assert ws.receive_bytes() == b"new"
+
+
+def test_a_browser_can_start_and_stop_recording_the_video():
+    app, _, videos = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "video_recording", "on": True})
+        ws.send_json({"type": "video_recording", "on": False})
+        wait_until(lambda: len(videos[0].recording_requests) == 2)
+    assert videos[0].recording_requests == [True, False]
+
+
+@pytest.mark.parametrize("message", ["not json", "[1, 2]", '{"no": "type"}', '{"type": "launch"}'])
+def test_a_request_the_station_does_not_know_is_ignored(message):
+    app, _, videos = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_text(message)
+        ws.send_json({"type": "video_recording", "on": True})  # still listened to
+        wait_until(lambda: videos[0].recording_requests == [True])
+
+
+@pytest.mark.parametrize("path", ["/ws", "/ws/video"])
+def test_only_the_stations_own_page_may_connect(path):
+    app, _, _ = make_app()
+    with TestClient(app) as client:
+        with client.websocket_connect(path, headers={"origin": "http://testserver"}):
+            pass  # the page the station served
+        with client.websocket_connect(path):
+            pass  # a program, not a browser: no Origin
+        with (
+            pytest.raises(WebSocketDisconnect) as refused,
+            client.websocket_connect(path, headers={"origin": "http://evil.example"}),
+        ):
+            pass
+    assert refused.value.code == 1008
+
+
+def test_video_turned_off_is_reported_and_cannot_be_recorded():
+    app, _, videos = make_app(video=VideoConfig(enabled=False))
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "hello"
+        status = ws.receive_json()
+        ws.send_json({"type": "video_recording", "on": True})
+        warning = ws.receive_json()
+    assert videos == []
+    assert status["type"] == "video"
+    assert status["state"] == "OFF"
+    assert warning["severity"] == "WARNING"
+    assert warning["text"] == "cannot record video: video is turned off"
+
+
+def test_a_slow_browser_skips_states_but_keeps_every_event():
     async def scenario():
         client = Client()
-        for push, text in [
-            (client.push_snapshot, "s1"),
-            (client.push_event, "e1"),
-            (client.push_snapshot, "s2"),
-            (client.push_event, "e2"),
-        ]:
-            push(text)
+        client.push_state("snapshot", "s1")
+        client.push_event("e1")
+        client.push_state("video", "v1")
+        client.push_state("snapshot", "s2")
+        client.push_event("e2")
         return await client.next_batch()
 
-    assert asyncio.run(scenario()) == ["e1", "e2", "s2"]
+    assert asyncio.run(scenario()) == ["e1", "e2", "s2", "v1"]
 
 
 def test_nan_is_refused_before_it_reaches_a_browser():

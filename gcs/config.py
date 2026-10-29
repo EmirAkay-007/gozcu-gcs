@@ -65,11 +65,27 @@ class MapConfig:
 
 
 @dataclass(frozen=True)
+class VideoConfig:
+    enabled: bool = True
+    host: str = "127.0.0.1"  # the address to receive on; "0.0.0.0" takes any sender
+    port: int = 5600
+    max_fps: float = 0.0  # frames a second sent to the browser; 0: every frame
+    ffmpeg: str = "ffmpeg"  # the program that decodes the video
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.port <= 65535:
+            raise ConfigError("[video] port must be 1..65535")
+        if not 0 <= self.max_fps <= 60:
+            raise ConfigError("[video] max_fps must be 0..60")
+
+
+@dataclass(frozen=True)
 class Config:
     mavlink: MavlinkConfig = field(default_factory=MavlinkConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     recording: RecordingConfig = field(default_factory=RecordingConfig)
     map: MapConfig = field(default_factory=MapConfig)
+    video: VideoConfig = field(default_factory=VideoConfig)
 
 
 SECTIONS = {
@@ -77,6 +93,7 @@ SECTIONS = {
     "server": ServerConfig,
     "recording": RecordingConfig,
     "map": MapConfig,
+    "video": VideoConfig,
 }
 
 

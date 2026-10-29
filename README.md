@@ -23,7 +23,7 @@ Python packages, which would otherwise leak into this project's environment.
 The browser code needs no build step. With Node.js 22.7 or newer installed (on `PATH` or
 through nvm), pytest also parses every script in `web/js` and runs the unit tests in
 `tests/js`; without Node.js those two tests are skipped. To run only the browser tests:
-`node --test tests/js/*.test.js`.
+`node --test tests/js/*.test.js`. The video tests run a real ffmpeg and are skipped without it.
 
 ## Running
 
@@ -41,6 +41,24 @@ The map draws OpenStreetMap tiles, so it needs internet. Without it, or with
 offline use, point `tile_url` at a tile server of your own: OpenStreetMap's servers must
 not be bulk-downloaded or used offline. Licenses of everything from elsewhere are listed
 in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Video
+
+The camera stream, H.264 in MPEG-TS, arrives on UDP `127.0.0.1:5600`, where Gazebo's
+camera plugin sends it once its streaming has been enabled (`enable_streaming` on the
+camera's topic). ffmpeg (`sudo apt install ffmpeg`) turns it into JPEG frames for the
+video panel; without ffmpeg there is no picture, but recording still works. `[video]` sets
+the address, a frame-rate limit for the browser (`max_fps`), or turns video off.
+
+**REC** records the stream exactly as it arrives, without re-encoding, into the logs
+folder as `<start time>_video.ts` (plays in VLC, mpv or ffplay; the first half second can
+be grey until the next keyframe).
+
+Measured with the Gazebo camera (640x480, about 19 fps, 0.9 Mbit/s) on an i7-13650HX:
+ffmpeg needs about 12 % of one core for every frame (8 % with `max_fps = 10`), and a
+frame reaches the browser about 100 ms after its first packet, all but 4 ms of that
+because MPEG-TS completes a frame only when the next one begins. Recording costs no
+measurable CPU.
 
 ## Recordings
 

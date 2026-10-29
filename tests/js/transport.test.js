@@ -5,16 +5,25 @@ import { Transport } from "../../web/js/transport.js";
 
 /** Stands in for the browser's WebSocket; the test opens, feeds and closes it. */
 class FakeSocket {
+  static OPEN = 1;
   onopen = null; // set by the transport, as on a real socket
   onmessage = null;
   onclose = null;
+  binaryType = "blob";
+  readyState = 0;
+  sent = [];
 
   constructor(url, sockets) {
     this.url = url;
     sockets.push(this);
   }
 
+  send(text) {
+    this.sent.push(text);
+  }
+
   open() {
+    this.readyState = FakeSocket.OPEN;
     this.onopen();
   }
 
@@ -22,7 +31,12 @@ class FakeSocket {
     this.onmessage({ data: JSON.stringify(message) });
   }
 
+  receiveBinary(data) {
+    this.onmessage({ data });
+  }
+
   close() {
+    this.readyState = 3;
     this.onclose();
   }
 }
@@ -96,4 +110,31 @@ test("each message goes to the handlers of its type", (t) => {
   sockets[0].receive({ type: "snapshot", seq: 7 });
   sockets[0].receive({ type: "something newer" });
   assert.deepEqual(seen, ["event hello", "snapshot 7", "second handler"]);
+});
+
+test("a binary message goes to the binary handlers, as it came", (t) => {
+  const sockets = fakeBrowser(t);
+  const frames = [];
+  const json = [];
+  new Transport("ws://gcs/ws/video")
+    .onBinary((frame) => frames.push(frame))
+    .on("snapshot", (snapshot) => json.push(snapshot))
+    .start();
+  const frame = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  sockets[0].open();
+  sockets[0].receiveBinary(frame);
+  assert.equal(sockets[0].binaryType, "blob");
+  assert.deepEqual(frames, [frame]);
+  assert.deepEqual(json, []);
+});
+
+test("a request is sent only while connected, never queued", (t) => {
+  const sockets = fakeBrowser(t);
+  const transport = new Transport("ws://gcs/ws").start();
+  assert.equal(transport.send({ type: "video_recording", on: true }), false);
+  sockets[0].open();
+  assert.equal(transport.send({ type: "video_recording", on: true }), true);
+  sockets[0].close();
+  assert.equal(transport.send({ type: "video_recording", on: false }), false);
+  assert.deepEqual(sockets[0].sent, ['{"type":"video_recording","on":true}']);
 });

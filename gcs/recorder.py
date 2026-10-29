@@ -77,19 +77,29 @@ def encode_line(item: dict[str, Any]) -> str:
     return json.dumps(item, allow_nan=False, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
-def open_recorder(settings: RecordingConfig, header: dict[str, Any]) -> "Recorder":
-    """Start a new file named after the start time; raises OSError if that is not possible."""
-    folder = log_directory(settings.directory)
+def file_stamp(now: float) -> str:
+    """A start time as recordings are named, e.g. 2026-10-29_13-36-03."""
+    return datetime.fromtimestamp(now).strftime("%Y-%m-%d_%H-%M-%S")
+
+
+def create_new(folder: Path, stem: str, suffix: str) -> Path:
+    """Create an empty file folder/stem+suffix, or stem_2+suffix and so on if that is
+    taken: a recording never overwrites another. Raises OSError if it cannot."""
     folder.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.fromtimestamp(header["time"]).strftime("%Y-%m-%d_%H-%M-%S")
     for n in range(1, 100):
-        path = folder / (f"{stamp}.jsonl" if n == 1 else f"{stamp}_{n}.jsonl")
+        path = folder / (f"{stem}{suffix}" if n == 1 else f"{stem}_{n}{suffix}")
         try:
-            file = path.open("x", encoding="utf-8")  # never overwrite an earlier session
+            path.open("x").close()
         except FileExistsError:
             continue
-        return Recorder(file, path, header, settings.values_hz)
-    raise FileExistsError(f"{folder}: too many sessions started at {stamp}")
+        return path
+    raise FileExistsError(f"{folder}: too many recordings named {stem}")
+
+
+def open_recorder(settings: RecordingConfig, header: dict[str, Any]) -> "Recorder":
+    """Start a new file named after the start time; raises OSError if that is not possible."""
+    path = create_new(log_directory(settings.directory), file_stamp(header["time"]), ".jsonl")
+    return Recorder(path.open("w", encoding="utf-8"), path, header, settings.values_hz)
 
 
 class Recorder:
@@ -107,8 +117,9 @@ class Recorder:
         self._thread.start()
 
     def record(self, item: dict[str, Any]) -> None:
-        """Queue an event, or a snapshot when a values line is due."""
-        if self._closed:
+        """Queue an event, or a snapshot when a values line is due. Other items, such as
+        the video status, are not kept: what changes in them is also an event."""
+        if self._closed or item["type"] not in ("event", "snapshot"):
             return
         if item["type"] == "snapshot":
             if item["time"] < self._next_values:

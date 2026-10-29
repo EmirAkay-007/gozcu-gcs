@@ -435,6 +435,28 @@ input:focus-visible {
   gap: 4px;
 }
 
+.view-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec {
+  min-width: 4.5em; /* "REC 12:34" does not shift the buttons beside it */
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-signal);
+  font-weight: 700;
+}
+
 .view-body {
   position: relative;
   flex: 1;

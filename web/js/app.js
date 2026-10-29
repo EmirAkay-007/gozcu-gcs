@@ -5,7 +5,7 @@ import { setUpLayout } from "./layout.js";
 import { EventLog } from "./log.js";
 import { MapPanel } from "./map.js";
 import { TopBar } from "./topbar.js";
-import { Transport } from "./transport.js";
+import { Transport, stationUrl } from "./transport.js";
 import { VideoPanel } from "./video.js";
 import { TelemetryPanel } from "./widgets.js";
 
@@ -22,12 +22,18 @@ const eventLog = new EventLog({
   search: byId("log-search"),
 });
 const map = new MapPanel(byId("map"), byId("map-follow"), byId("map-notice"));
-new VideoPanel(byId("video-canvas"));
+const station = new Transport();
+const video = new VideoPanel({
+  canvas: byId("video-canvas"),
+  info: byId("video-info"),
+  record: byId("video-rec"),
+  onRecord: (on) => station.send({ type: "video_recording", on }),
+});
 setUpLayout(document);
 
 let wasConnected = false;
 
-new Transport()
+station
   .on("hello", (hello) => {
     eventLog.clear(); // the server replays its recent events next
     telemetry.build(hello.fields);
@@ -39,6 +45,7 @@ new Transport()
     attitude.update(snapshot.fields);
     map.update(snapshot.fields);
   })
+  .on("video", (status) => video.update(status))
   .on("event", (event) => eventLog.add(event))
   .onStatus((connected) => {
     if (!connected) {
@@ -46,6 +53,7 @@ new Transport()
       telemetry.showOffline();
       attitude.showOffline();
       map.showOffline();
+      video.showOffline();
     }
     if (wasConnected && !connected) {
       eventLog.add({
@@ -58,3 +66,6 @@ new Transport()
     wasConnected = connected;
   })
   .start();
+
+// Frames come on a connection of their own, so a picture never delays telemetry.
+new Transport(stationUrl("/ws/video")).onBinary((frame) => video.showFrame(frame)).start();

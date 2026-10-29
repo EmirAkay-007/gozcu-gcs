@@ -26,6 +26,16 @@ The map loads its background from the tile server set as `[map] tile_url`, by de
   One station browsing is fine; bulk downloading and offline use are not. Offline use
   needs a tile server of your own.
 
+## Run as a separate program
+
+### ffmpeg
+
+The video panel runs the system's ffmpeg (`sudo apt install ffmpeg`) as a separate
+process to turn the camera stream into JPEG frames; it is not part of this repository and
+nothing here links against it. Ubuntu's build is licensed GPL-2.0-or-later as a whole
+(its libraries alone are LGPL-2.1-or-later). A package that ships ffmpeg along with the
+station must follow ffmpeg's license.
+
 ## Installed by pip (not part of this repository)
 
 What the station needs to run, with the versions pinned in `pyproject.toml`:
