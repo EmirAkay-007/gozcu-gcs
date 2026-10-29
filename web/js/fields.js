@@ -12,9 +12,9 @@ export const WAITING = {
   level: null,
 };
 
-/** Seconds as a short age, e.g. "12 s", "3 min". */
+/** Seconds as a short age in whole units, e.g. "12 s", "3 min". */
 export function formatAge(seconds) {
-  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 60) return `${Math.floor(seconds)} s`; // rounding would show 59.6 as "60 s"
   if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
   return `${Math.floor(seconds / 3600)} h`;
 }

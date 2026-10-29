@@ -20,6 +20,11 @@ python3 -m venv .venv
 `-E` makes Python ignore `PYTHONPATH`. Where ROS is sourced, that variable points at ROS's
 Python packages, which would otherwise leak into this project's environment.
 
+The browser code needs no build step. With Node.js 22.7 or newer installed (on `PATH` or
+through nvm), pytest also parses every script in `web/js` and runs the unit tests in
+`tests/js`; without Node.js those two tests are skipped. To run only the browser tests:
+`node --test tests/js/*.test.js`.
+
 ## Running
 
 ```bash
@@ -28,6 +33,14 @@ Python packages, which would otherwise leak into this project's environment.
 
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
 `--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`.
+
+## Map
+
+The map draws OpenStreetMap tiles, so it needs internet. Without it, or with
+`[map] tile_url = ""`, the vehicle, its track and home are drawn on a plain grid. For
+offline use, point `tile_url` at a tile server of your own: OpenStreetMap's servers must
+not be bulk-downloaded or used offline. Licenses of everything from elsewhere are listed
+in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Recordings
 

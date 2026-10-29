@@ -49,6 +49,8 @@ def test_a_browser_gets_the_field_list_then_live_data():
         assert hello["type"] == "hello"
         airspeed = {"key": "airspeed", "label": "Airspeed", "unit": "m/s", "pinned": True}
         assert airspeed in hello["fields"]
+        assert hello["map"]["tile_url"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        assert "OpenStreetMap" in hello["map"]["attribution"]
         sources[0].publish(EVENT)
         assert ws.receive_json() == EVENT
         sources[0].publish(SNAPSHOT)
@@ -131,4 +133,4 @@ def test_nan_is_refused_before_it_reaches_a_browser():
 def test_publishing_after_shutdown_is_harmless():
     loop = asyncio.new_event_loop()
     loop.close()
-    make_publish(loop, Hub(hello_message()))(EVENT)  # must not raise
+    make_publish(loop, Hub(hello_message(Config())))(EVENT)  # must not raise

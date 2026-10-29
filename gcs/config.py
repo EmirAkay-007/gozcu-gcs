@@ -52,13 +52,32 @@ class RecordingConfig:
 
 
 @dataclass(frozen=True)
+class MapConfig:
+    tile_url: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"  # empty: no tiles
+    attribution: str = (
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    )
+    max_zoom: int = 19
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_zoom <= 22:
+            raise ConfigError("[map] max_zoom must be 1..22")
+
+
+@dataclass(frozen=True)
 class Config:
     mavlink: MavlinkConfig = field(default_factory=MavlinkConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     recording: RecordingConfig = field(default_factory=RecordingConfig)
+    map: MapConfig = field(default_factory=MapConfig)
 
 
-SECTIONS = {"mavlink": MavlinkConfig, "server": ServerConfig, "recording": RecordingConfig}
+SECTIONS = {
+    "mavlink": MavlinkConfig,
+    "server": ServerConfig,
+    "recording": RecordingConfig,
+    "map": MapConfig,
+}
 
 
 def load_config(path: Path) -> Config:

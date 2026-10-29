@@ -3,7 +3,8 @@
 // Pinned widgets stay in view; the rest fold away under "More". The registry
 // says which are pinned at first; "Customize" changes that, and this browser
 // remembers the choice. Why a value is missing is written under it, since a
-// tooltip is easy to miss on a cockpit screen.
+// tooltip is easy to miss on a cockpit screen; a value never received at all
+// just shows "—", or the list would repeat "not received" all the way down.
 
 import { WAITING, markStale, showField } from "./fields.js";
 
@@ -70,7 +71,8 @@ export class TelemetryPanel {
       const field = snapshot.fields[key];
       if (!field) continue;
       showField(widget.value, field);
-      widget.reason.textContent = field.value === null ? (field.reason ?? "") : "";
+      const received = field.age !== null;
+      widget.reason.textContent = field.value === null && received ? (field.reason ?? "") : "";
     }
   }
 

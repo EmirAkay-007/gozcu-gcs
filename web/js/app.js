@@ -3,6 +3,7 @@
 import { AttitudeIndicator } from "./attitude.js";
 import { setUpLayout } from "./layout.js";
 import { EventLog } from "./log.js";
+import { MapPanel } from "./map.js";
 import { TopBar } from "./topbar.js";
 import { Transport } from "./transport.js";
 import { VideoPanel } from "./video.js";
@@ -20,6 +21,7 @@ const eventLog = new EventLog({
   source: byId("log-source"),
   search: byId("log-search"),
 });
+const map = new MapPanel(byId("map"), byId("map-follow"), byId("map-notice"));
 new VideoPanel(byId("video-canvas"));
 setUpLayout(document);
 
@@ -29,11 +31,13 @@ new Transport()
   .on("hello", (hello) => {
     eventLog.clear(); // the server replays its recent events next
     telemetry.build(hello.fields);
+    map.configure(hello.map);
   })
   .on("snapshot", (snapshot) => {
     topBar.update(snapshot);
     telemetry.update(snapshot);
     attitude.update(snapshot.fields);
+    map.update(snapshot.fields);
   })
   .on("event", (event) => eventLog.add(event))
   .onStatus((connected) => {
@@ -41,6 +45,7 @@ new Transport()
       topBar.showOffline();
       telemetry.showOffline();
       attitude.showOffline();
+      map.showOffline();
     }
     if (wasConnected && !connected) {
       eventLog.add({

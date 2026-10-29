@@ -10,10 +10,19 @@ const VIEWS = ["video", "map"];
 
 function load() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? {};
+    return JSON.parse(localStorage.getItem(STORAGE_KEY));
   } catch {
-    return {}; // storage blocked, e.g. in a private window
+    return null; // storage blocked, e.g. in a private window
   }
+}
+
+/** The remembered arrangement, keeping only what is valid: it may come from an older version. */
+export function restoreLayout(saved) {
+  return {
+    swapped: saved?.swapped === true,
+    enlarged: VIEWS.includes(saved?.enlarged) ? saved.enlarged : "",
+    logFolded: saved?.logFolded === true,
+  };
 }
 
 function save(state) {
@@ -28,12 +37,7 @@ export function setUpLayout(document) {
   const center = document.getElementById("center");
   const log = document.getElementById("log");
   const logToggle = document.getElementById("log-toggle");
-  const saved = load(); // may come from an older version: take only what is valid
-  const state = {
-    swapped: saved.swapped === true,
-    enlarged: VIEWS.includes(saved.enlarged) ? saved.enlarged : "",
-    logFolded: saved.logFolded === true,
-  };
+  const state = restoreLayout(load());
 
   function apply() {
     center.classList.toggle("is-swapped", state.swapped);

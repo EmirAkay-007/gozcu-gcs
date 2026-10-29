@@ -105,10 +105,15 @@ class Hub:
         self._clients.discard(client)
 
 
-def hello_message() -> dict[str, Any]:
-    """Sent first to every browser: the fields it can show, in registry order."""
+def hello_message(config: Config) -> dict[str, Any]:
+    """Sent first to every browser: the fields it can show, in registry order, and the map."""
     fields = [{"key": f.key, "label": f.label, "unit": f.unit, "pinned": f.pinned} for f in FIELDS]
-    return {"type": "hello", "fields": fields}
+    map_settings = {
+        "tile_url": config.map.tile_url,
+        "attribution": config.map.attribution,
+        "max_zoom": config.map.max_zoom,
+    }
+    return {"type": "hello", "fields": fields, "map": map_settings}
 
 
 def make_publish(loop: asyncio.AbstractEventLoop, hub: Hub) -> Publish:
@@ -157,7 +162,7 @@ def server_event(severity: str, text: str) -> dict[str, Any]:
 def create_app(config: Config, source_factory: SourceFactory = MavlinkSource) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        hub = Hub(hello_message())
+        hub = Hub(hello_message(config))
         app.state.hub = hub
         publish = make_publish(asyncio.get_running_loop(), hub)
         publish, recorder = start_recording(config, publish)

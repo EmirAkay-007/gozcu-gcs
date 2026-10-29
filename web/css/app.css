@@ -389,13 +389,6 @@ input:focus-visible {
   padding: 8px 10px;
 }
 
-.placeholder {
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: var(--text-stale);
-}
-
 .center {
   display: grid;
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
@@ -451,6 +444,123 @@ input:focus-visible {
 .view-body > canvas {
   position: absolute;
   inset: 0;
+}
+
+/* Map (Leaflet, with its controls restyled to match) */
+
+.map {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* keeps Leaflet's layers under the notice */
+}
+
+.map.leaflet-container {
+  background: var(--surface);
+  font: 12px/1.4 var(--font-ui);
+}
+
+.map-grid-tile {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.map-trail-casing {
+  stroke: var(--black);
+}
+
+.map-trail {
+  stroke: var(--accent);
+}
+
+.map-vehicle svg {
+  display: block;
+  fill: var(--accent);
+  stroke: var(--black);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+.map-vehicle.is-stale svg {
+  fill: var(--text-stale);
+}
+
+.map-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--black);
+  color: var(--text);
+  font: 11px var(--font-num);
+  white-space: nowrap;
+}
+
+.map-label:empty {
+  display: none;
+}
+
+.map-home {
+  border: 2px solid var(--text);
+  border-radius: 3px;
+  background: var(--black);
+  color: var(--text);
+  font: 700 11px/14px var(--font-ui);
+  text-align: center;
+}
+
+.map .leaflet-bar {
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+
+.map .leaflet-bar a {
+  background: var(--panel);
+  border-bottom-color: var(--line-strong);
+  color: var(--text);
+}
+
+.map .leaflet-bar a:hover,
+.map .leaflet-bar a:focus {
+  background: var(--line);
+}
+
+.map .leaflet-bar a.leaflet-disabled {
+  background: var(--panel);
+  color: var(--text-stale);
+}
+
+.map .leaflet-control-attribution,
+.map .leaflet-control-scale-line {
+  background: rgb(0 0 0 / 0.75);
+  color: var(--text-dim);
+}
+
+.map .leaflet-control-attribution a {
+  color: var(--accent);
+}
+
+.map .leaflet-control-scale-line {
+  border-color: var(--text-dim);
+  color: var(--text);
+  text-shadow: none;
+}
+
+.map-notice {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  padding: 2px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Gözcü panel */
