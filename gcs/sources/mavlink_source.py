@@ -36,6 +36,7 @@ RECV_TIMEOUT_S = 0.05
 RETRY_MIN_S = 1.0  # first wait before reopening a failed link, doubled up to RETRY_MAX_S
 RETRY_MAX_S = 5.0
 REBOOT_JUMP_MS = 1000  # the vehicle clock going back by more than this means a reboot
+NO_VEHICLE_HINT_S = 3.0  # how long a new link may stay without an autopilot before we say why
 VEHICLE = "vehicle"  # RateMeter key for all traffic from the vehicle
 
 Publish = Callable[[dict[str, Any]], None]
@@ -120,6 +121,7 @@ class MavlinkSource:
             self._requests.poll(now)
             self._report_rejected_requests()
             self._update_link_state(now)
+            self._explain_missing_vehicle(now)
             self._tick(now)
             msg = conn.recv_match(blocking=True, timeout=RECV_TIMEOUT_S)
             if msg is None:
@@ -158,6 +160,10 @@ class MavlinkSource:
         rates = MESSAGE_RATES_HZ if self.config.request_rates else {}
         self._requests = IntervalRequester(rates, send=self._send_interval_request)
         self._reported_requests: set[str] = set()
+        self._session_started = self._clock()
+        self._messages = 0  # readable MAVLink messages from anyone
+        self._unreadable = 0  # chunks the parser rejected (CRC or framing errors)
+        self._hint_given = False
 
     # Sending
 
@@ -174,7 +180,9 @@ class MavlinkSource:
     def _handle(self, msg: Any, now: float) -> None:
         kind = msg.get_type()
         if kind == "BAD_DATA":
-            return  # already counted by the parser
+            self._unreadable += 1
+            return
+        self._messages += 1
         src = (msg.get_srcSystem(), msg.get_srcComponent())
         if self._vehicle is None and kind == "HEARTBEAT" and self._is_autopilot(msg, src):
             self._lock_on(msg, src, now)
@@ -246,6 +254,26 @@ class MavlinkSource:
             self._event("link", "WARNING", f"rate request for {request.name}: {request.result}")
 
     # Link state and output
+
+    def _explain_missing_vehicle(self, now: float) -> None:
+        """Say once per connection why no autopilot shows up, instead of waiting silently."""
+        if self._vehicle is not None or self._hint_given:
+            return
+        if now - self._session_started < NO_VEHICLE_HINT_S:
+            return
+        self._hint_given = True
+        where = self.config.connection
+        if self._messages:
+            text = f"MAVLink traffic on {where}, but no heartbeat from autopilot component "
+            text += str(self.config.target_compid)
+        elif self._unreadable:
+            text = f"only unreadable data on {where}: wrong baud rate, or not MAVLink?"
+        else:
+            text = (
+                f"no MAVLink data on {where} yet: another program may hold this port "
+                "(SITL serves one client per port), or the simulation is paused"
+            )
+        self._event("link", "WARNING", text)
 
     def _update_link_state(self, now: float) -> None:
         if self._vehicle is None:

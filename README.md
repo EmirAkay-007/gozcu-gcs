@@ -28,3 +28,10 @@ Python packages, which would otherwise leak into this project's environment.
 
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
 `--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`.
+
+## Recordings
+
+Every run is written to a JSON Lines file named after its start time
+(`2026-10-29_13-36-03.jsonl`) in a `Gözcü GCS logs` folder on the desktop, or in the folder
+set as `[recording] directory`. The first line describes the session; then come all events
+and, twice a second, the value of every field (`null` when unknown or stale): about 4 MB an hour.

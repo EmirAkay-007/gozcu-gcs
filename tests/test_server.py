@@ -1,9 +1,10 @@
 import asyncio
+import json
 
 import pytest
 from fastapi.testclient import TestClient
 
-from gcs.config import Config
+from gcs.config import Config, RecordingConfig
 from gcs.server import Client, Hub, create_app, encode, hello_message, make_publish
 
 EVENT = {"type": "event", "time": 1.0, "source": "link", "severity": "INFO", "text": "hello"}
@@ -14,6 +15,7 @@ SNAPSHOT = {
     "link": {"state": "CONNECTED", "connection": "tcp:127.0.0.1:5762", "vehicle": None},
     "fields": {},
 }
+NOT_RECORDING = RecordingConfig(enabled=False)
 
 
 class FakeSource:
@@ -30,14 +32,14 @@ class FakeSource:
         self.running = False
 
 
-def make_app():
+def make_app(recording=NOT_RECORDING):
     sources = []
 
     def factory(config, publish):
         sources.append(FakeSource(config, publish))
         return sources[-1]
 
-    return create_app(Config(), source_factory=factory), sources
+    return create_app(Config(recording=recording), source_factory=factory), sources
 
 
 def test_a_browser_gets_the_field_list_then_live_data():
@@ -45,9 +47,8 @@ def test_a_browser_gets_the_field_list_then_live_data():
     with TestClient(app) as client, client.websocket_connect("/ws") as ws:
         hello = ws.receive_json()
         assert hello["type"] == "hello"
-        assert {"key": "airspeed", "label": "Airspeed", "unit": "m/s", "pinned": True} in hello[
-            "fields"
-        ]
+        airspeed = {"key": "airspeed", "label": "Airspeed", "unit": "m/s", "pinned": True}
+        assert airspeed in hello["fields"]
         sources[0].publish(EVENT)
         assert ws.receive_json() == EVENT
         sources[0].publish(SNAPSHOT)
@@ -82,6 +83,29 @@ def test_the_page_is_served_and_does_not_hide_the_websocket():
     assert "Gözcü GCS" in page.text
     assert script.status_code == 200
     assert "javascript" in script.headers["content-type"]  # ES modules need this type
+
+
+def test_a_session_is_recorded_to_a_file(tmp_path):
+    app, sources = make_app(RecordingConfig(directory=str(tmp_path)))
+    with TestClient(app):
+        sources[0].publish(EVENT)
+        sources[0].publish(SNAPSHOT)
+    (path,) = tmp_path.glob("*.jsonl")
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [line["type"] for line in lines] == ["session", "event", "event", "values"]
+    assert lines[1]["text"] == f"recording to {path}"
+    assert lines[2] == EVENT
+
+
+def test_the_station_runs_on_when_it_cannot_record(tmp_path):
+    blocker = tmp_path / "a file"
+    blocker.write_text("", encoding="utf-8")
+    app, _ = make_app(RecordingConfig(directory=str(blocker / "logs")))  # cannot be created
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "hello"
+        warning = ws.receive_json()
+    assert warning["severity"] == "WARNING"
+    assert warning["text"].startswith("not recording:")
 
 
 def test_a_slow_browser_skips_snapshots_but_keeps_every_event():

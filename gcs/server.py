@@ -11,6 +11,7 @@ matters, but it receives every event.
 import asyncio
 import json
 import logging
+import time
 from collections import deque
 from collections.abc import Callable
 from contextlib import asynccontextmanager, suppress
@@ -22,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from gcs.config import Config
 from gcs.fields import FIELDS
+from gcs.recorder import Recorder, open_recorder, session_header
 from gcs.sources.base import TelemetrySource
 from gcs.sources.mavlink_source import MavlinkSource
 
@@ -121,17 +123,52 @@ def make_publish(loop: asyncio.AbstractEventLoop, hub: Hub) -> Publish:
     return publish
 
 
+def start_recording(config: Config, publish: Publish) -> tuple[Publish, Recorder | None]:
+    """Add a recorder behind publish() when recording is on; tell the operator either way.
+
+    Recording is secondary: if the file cannot be opened, the station still runs.
+    """
+    if not config.recording.enabled:
+        return publish, None
+    try:
+        recorder = open_recorder(config.recording, session_header(config, time.time()))
+    except OSError as exc:
+        publish(server_event("WARNING", f"not recording: {exc}"))
+        return publish, None
+
+    def publish_and_record(item: dict[str, Any]) -> None:
+        publish(item)
+        recorder.record(item)
+
+    publish_and_record(server_event("INFO", f"recording to {recorder.path}"))
+    return publish_and_record, recorder
+
+
+def server_event(severity: str, text: str) -> dict[str, Any]:
+    return {
+        "type": "event",
+        "time": time.time(),
+        "source": "server",
+        "severity": severity,
+        "text": text,
+    }
+
+
 def create_app(config: Config, source_factory: SourceFactory = MavlinkSource) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         hub = Hub(hello_message())
         app.state.hub = hub
-        source = source_factory(config.mavlink, make_publish(asyncio.get_running_loop(), hub))
+        publish = make_publish(asyncio.get_running_loop(), hub)
+        publish, recorder = start_recording(config, publish)
+        source = source_factory(config.mavlink, publish)
         source.start()
         try:
             yield
         finally:
-            await asyncio.to_thread(source.stop)
+            await asyncio.to_thread(source.stop)  # no more items after this...
+            if recorder is not None:
+                await asyncio.to_thread(recorder.close)  # ...so nothing is lost here
 
     app = FastAPI(
         title="Gözcü GCS", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None

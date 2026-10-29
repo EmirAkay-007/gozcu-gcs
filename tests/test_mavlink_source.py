@@ -11,7 +11,15 @@ from gcs.config import MavlinkConfig
 from gcs.fields import MESSAGE_RATES_HZ
 from gcs.intervals import message_id
 from gcs.mav import mavlink
-from gcs.sources.mavlink_source import CONNECTED, CONNECTING, LINK_LOST, MavlinkSource, next_due
+from gcs.sources import mavlink_source
+from gcs.sources.mavlink_source import (
+    CONNECTED,
+    CONNECTING,
+    LINK_LOST,
+    NO_VEHICLE,
+    MavlinkSource,
+    next_due,
+)
 from gcs.state import TelemetryState
 
 
@@ -235,6 +243,16 @@ def test_a_message_that_cannot_be_handled_does_not_stop_the_telemetry(
     time.sleep(0.5)  # several more ATTITUDE messages arrive and fail
     assert link_state(published) == CONNECTED
     assert sum("cannot handle ATTITUDE" in text for text in events(published)) == 1
+
+
+def test_a_port_that_stays_silent_is_explained(run_source, monkeypatch):
+    monkeypatch.setattr(mavlink_source, "NO_VEHICLE_HINT_S", 0.3)
+    # Listens but never accepts: the connection completes in the kernel's backlog and
+    # then nothing arrives, just like SITL's port while another program holds it.
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        published = run_source(connection=f"tcp:127.0.0.1:{server.getsockname()[1]}")
+        wait_for(lambda: any("no MAVLink data" in text for text in events(published)))
+        assert link_state(published) == NO_VEHICLE
 
 
 def test_keeps_reporting_while_nothing_listens(run_source):

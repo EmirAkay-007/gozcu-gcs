@@ -41,12 +41,24 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class RecordingConfig:
+    enabled: bool = True
+    directory: str = ""  # empty: a folder on the desktop (see gcs.recorder)
+    values_hz: float = 2.0
+
+    def __post_init__(self) -> None:
+        if not 0 < self.values_hz <= 10:  # snapshots come at 10 Hz
+            raise ConfigError("[recording] values_hz must be above 0 and at most 10")
+
+
+@dataclass(frozen=True)
 class Config:
     mavlink: MavlinkConfig = field(default_factory=MavlinkConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    recording: RecordingConfig = field(default_factory=RecordingConfig)
 
 
-SECTIONS = {"mavlink": MavlinkConfig, "server": ServerConfig}
+SECTIONS = {"mavlink": MavlinkConfig, "server": ServerConfig, "recording": RecordingConfig}
 
 
 def load_config(path: Path) -> Config:

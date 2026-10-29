@@ -20,3 +20,14 @@ request_rates = true
 [server]
 host = "127.0.0.1"
 port = 8000
+
+[recording]
+# Write each session to a JSON Lines file: every event, plus the field values a few
+# times a second (a few MB per hour).
+enabled = true
+# Folder for the files. Empty means a "Gözcü GCS logs" folder on the desktop that
+# ~/.config/user-dirs.dirs names (the home folder if there is none). "~" is the
+# home folder, e.g. "~/Masaüstü/Gözcü GCS logs".
+directory = ""
+# How often the field values are written, in Hz (at most 10; events always are).
+values_hz = 2.0
