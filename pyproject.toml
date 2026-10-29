@@ -32,3 +32,5 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A warning, such as an exception that killed a thread, fails the run.
+filterwarnings = ["error"]

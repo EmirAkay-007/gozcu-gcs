@@ -17,22 +17,11 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from gcs.fields import MESSAGE_RATES_HZ as REQUESTED_RATES_HZ  # the GCS's own rate table
 from gcs.heartbeat import is_armed, is_vehicle_heartbeat, mode_name
 from gcs.intervals import NO_ACK, IntervalRequester, send_interval_request
 from gcs.link_stats import PacketLossMeter, RateMeter
 from gcs.mav import enum_name, mavlink, mavutil, open_link
-
-# What the GCS asks the autopilot for, in Hz. The UI refreshes at 10 Hz, so
-# faster streams would be wasted; slowly changing values get slower rates.
-REQUESTED_RATES_HZ = {
-    "ATTITUDE": 10.0,
-    "GLOBAL_POSITION_INT": 5.0,
-    "VFR_HUD": 5.0,
-    "SYS_STATUS": 2.0,
-    "GPS_RAW_INT": 2.0,
-    "BATTERY_STATUS": 1.0,
-    "HOME_POSITION": 0.2,
-}
 
 HEARTBEAT_PERIOD_S = 1.0
 STATUS_PERIOD_S = 2.0

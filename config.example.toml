@@ -1,0 +1,22 @@
+# Gözcü GCS settings. Copy this file to config.toml (ignored by git) and edit the
+# copy; any setting left out keeps the default shown here.
+
+[mavlink]
+# pymavlink connection string, e.g. "tcp:127.0.0.1:5762", "udpin:0.0.0.0:14551" or
+# "/dev/ttyUSB0,57600".
+connection = "tcp:127.0.0.1:5762"
+# Our MAVLink identity. 250 lies outside ArduPilot's MAV_GCS_SYSID (255) on purpose,
+# so this monitoring station never counts as the vehicle's failsafe GCS.
+sysid = 250
+compid = 190
+# Component id of the autopilot to lock onto.
+target_compid = 1
+# Seconds without an autopilot heartbeat before the link is reported LOST.
+link_lost_s = 3.0
+# Ask the autopilot for the message rates the GCS needs. Turn this off on a link
+# shared with another ground station that manages the rates itself.
+request_rates = true
+
+[server]
+host = "127.0.0.1"
+port = 8000
