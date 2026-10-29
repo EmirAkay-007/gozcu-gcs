@@ -18,6 +18,7 @@ export class Transport {
   #handlers = new Map();
   #statusHandlers = [];
   #retryMs = RETRY_MIN_MS;
+  #connected = null; // unknown until the first attempt succeeds or fails
 
   constructor(url = defaultUrl()) {
     this.#url = url;
@@ -30,7 +31,8 @@ export class Transport {
     return this;
   }
 
-  /** Call handler(connected) whenever the connection opens (true) or drops (false). */
+  /** Call handler(connected) when the connection opens (true) or drops (false); a failed
+   * retry while already disconnected is not reported again. */
   onStatus(handler) {
     this.#statusHandlers.push(handler);
     return this;
@@ -61,6 +63,8 @@ export class Transport {
   }
 
   #setStatus(connected) {
+    if (connected === this.#connected) return;
+    this.#connected = connected;
     for (const handler of this.#statusHandlers) handler(connected);
   }
 }

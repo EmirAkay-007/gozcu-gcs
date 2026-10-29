@@ -4,119 +4,160 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gözcü GCS</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin: 16px; background: #050D1F; color: #E8EEFA; font: 14px/1.4 system-ui, sans-serif; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  h2 { font-size: 15px; color: #A9BEE6; }
-  .note { color: #A9BEE6; margin-top: 0; }
-  .columns { display: flex; flex-wrap: wrap; gap: 32px; }
-  table { border-collapse: collapse; }
-  th, td { padding: 2px 10px; border-bottom: 1px solid #16306B; text-align: left; }
-  .num, ul { font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
-  .num { text-align: right; }
-  .stale { color: #6B7FA8; }
-  ul { padding-left: 0; list-style: none; max-width: 70ch; }
-</style>
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/app.js"></script>
 </head>
 <body>
-<h1>Gözcü GCS</h1>
-<p class="note">Temporary page (roadmap step 2b): the raw data the interface will be built on.</p>
-<p>
-  Server: <span id="server">connecting…</span> ·
-  Link: <span id="link">—</span> ·
-  Snapshot <span id="seq">—</span> (<span id="rate">—</span> per s)
-</p>
-<div class="columns">
-  <section>
-    <h2>Fields</h2>
-    <table>
-      <thead><tr><th>Field</th><th>Value</th><th>Unit</th><th>Age (s)</th><th>Note</th></tr></thead>
-      <tbody id="fields"></tbody>
-    </table>
+
+<!-- Elements with data-key show the snapshot field of that name (gcs/fields.py);
+     data-unit is appended to the value. -->
+<header class="topbar" id="topbar">
+  <div class="brand">GÖZCÜ <span>GCS</span></div>
+
+  <div class="tb-item">
+    <span class="label">Link</span>
+    <span class="value">
+      <span class="badge" id="link-state">NO DATA</span>
+      <span class="sub num">
+        HB <span data-key="heartbeat_age" data-unit="s"></span>
+        · <span data-key="link_rate" data-unit="msg/s"></span>
+        · loss <span data-key="link_loss" data-unit="%"></span>
+      </span>
+    </span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">Vehicle</span>
+    <span class="value num" id="vehicle">—</span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">Mode</span>
+    <span class="value"><span data-key="mode"></span></span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">Arm</span>
+    <span class="value"><span class="armed" id="armed" data-key="armed"></span></span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">GPS</span>
+    <span class="value num">
+      <span data-key="gps_fix"></span>
+      <span data-key="gps_sats" data-unit="sats" data-optional></span>
+    </span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">Battery</span>
+    <span class="value num">
+      <span data-key="battery_voltage" data-unit="V"></span>
+      <span data-key="battery_remaining" data-unit="%" data-optional></span>
+    </span>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="tb-item">
+    <span class="label">Connection</span>
+    <span class="value num sub" id="connection">—</span>
+  </div>
+
+  <div class="tb-item">
+    <span class="label">Local time</span>
+    <span class="value num" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<main class="main">
+  <aside class="panel" aria-labelledby="telemetry-title">
+    <h2 id="telemetry-title">Telemetry</h2>
+    <div class="panel-body placeholder">Widgets arrive in roadmap step 4.</div>
+  </aside>
+
+  <section class="center" id="center" aria-label="Video and map">
+    <article class="view" data-view="video">
+      <header class="view-head">
+        <h2>Video</h2>
+        <div class="view-tools">
+          <button type="button" data-action="swap" title="Swap video and map">Swap</button>
+          <button type="button" data-action="enlarge" title="Enlarge or restore (double-click, Esc)">Enlarge</button>
+        </div>
+      </header>
+      <div class="view-body"><canvas id="video-canvas"></canvas></div>
+    </article>
+
+    <article class="view" data-view="map">
+      <header class="view-head">
+        <h2>Map</h2>
+        <div class="view-tools">
+          <button type="button" data-action="swap" title="Swap video and map">Swap</button>
+          <button type="button" data-action="enlarge" title="Enlarge or restore (double-click, Esc)">Enlarge</button>
+        </div>
+      </header>
+      <div class="view-body placeholder">The map arrives in roadmap step 5.</div>
+    </article>
   </section>
-  <section>
-    <h2>Events, newest first</h2>
-    <ul id="events"></ul>
-  </section>
-</div>
-<script type="module">
-  import { Transport } from "./js/transport.js";
 
-  const MAX_EVENTS = 100;
-  const rows = new Map(); // field key -> its table cells
-  const byId = (id) => document.getElementById(id);
+  <aside class="panel" aria-labelledby="gozcu-title">
+    <h2 id="gozcu-title">Gözcü</h2>
+    <div class="panel-body gozcu">
+      <div class="badge threat" id="threat">NO DATA</div>
 
-  function addCell(row, text, className = "") {
-    const cell = row.insertCell();
-    cell.textContent = text;
-    cell.className = className;
-    return cell;
-  }
+      <section>
+        <h3>Mode</h3>
+        <div class="segmented" role="group" aria-label="Gözcü mode">
+          <button type="button" disabled title="Commands arrive in roadmap step 7">WARN</button>
+          <button type="button" disabled title="Commands arrive in roadmap step 7">CONFIRM</button>
+          <button type="button" disabled title="Commands arrive in roadmap step 7">AUTO</button>
+        </div>
+      </section>
 
-  function onHello(hello) {
-    // Rebuilt on every (re)connect; the server replays its recent events after this.
-    byId("fields").replaceChildren();
-    byId("events").replaceChildren();
-    rows.clear();
-    for (const field of hello.fields) {
-      const row = byId("fields").insertRow();
-      addCell(row, field.label);
-      rows.set(field.key, {
-        row,
-        value: addCell(row, "—", "num"),
-        unit: addCell(row, field.unit),
-        age: addCell(row, "", "num"),
-        note: addCell(row, ""),
-      });
-    }
-  }
+      <section>
+        <h3>ARM / INHIBIT switch</h3>
+        <div class="readout">— (read only: the switch on the board decides)</div>
+      </section>
 
-  let received = 0;
-  let countingSince = performance.now();
+      <section>
+        <h3>Tracks</h3>
+        <table class="tracks num">
+          <thead>
+            <tr><th>ID</th><th>Class</th><th>Conf</th><th>Az/El °</th><th>Rate °/s</th><th>px</th><th>τ s</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="empty" colspan="7">No tracks</td></tr>
+          </tbody>
+        </table>
+      </section>
 
-  function onSnapshot(snapshot) {
-    const { link } = snapshot;
-    byId("link").textContent = link.vehicle
-      ? `${link.state} · ${link.vehicle.type} ${link.vehicle.sysid}/${link.vehicle.compid}`
-      : link.state;
-    byId("seq").textContent = snapshot.seq;
-    for (const [key, field] of Object.entries(snapshot.fields)) {
-      const cells = rows.get(key);
-      if (!cells) continue;
-      cells.value.textContent = field.text;
-      cells.age.textContent = field.age === null ? "" : field.age.toFixed(1);
-      cells.note.textContent = [field.stale ? "STALE" : "", field.level?.toUpperCase(), field.reason]
-        .filter(Boolean)
-        .join(" · ");
-      cells.row.className = field.stale ? "stale" : "";
-    }
-    received += 1;
-    const seconds = (performance.now() - countingSince) / 1000;
-    if (seconds >= 2) {
-      byId("rate").textContent = (received / seconds).toFixed(1);
-      received = 0;
-      countingSince = performance.now();
-    }
-  }
+      <section>
+        <h3>Manoeuvre</h3>
+        <div class="readout">—</div>
+      </section>
 
-  function onEvent(event) {
-    const item = document.createElement("li");
-    const time = new Date(event.time * 1000).toLocaleTimeString();
-    item.textContent = `${time}  ${event.severity}  [${event.source}]  ${event.text}`;
-    const list = byId("events");
-    list.prepend(item);
-    while (list.children.length > MAX_EVENTS) list.lastChild.remove();
-  }
+      <section>
+        <h3>Health</h3>
+        <dl class="health num">
+          <dt>MPU heartbeat</dt><dd>—</dd>
+          <dt>Perception age</dt><dd>—</dd>
+          <dt>Perception rate</dt><dd>—</dd>
+          <dt>Camera-to-decision</dt><dd>—</dd>
+          <dt>CPU temperature</dt><dd>—</dd>
+          <dt>Watchdog trips</dt><dd>—</dd>
+        </dl>
+      </section>
+    </div>
+  </aside>
+</main>
 
-  new Transport()
-    .on("hello", onHello)
-    .on("snapshot", onSnapshot)
-    .on("event", onEvent)
-    .onStatus((connected) => {
-      byId("server").textContent = connected ? "connected" : "disconnected, retrying…";
-    })
-    .start();
-</script>
+<footer class="log" id="log">
+  <div class="log-head">
+    <button type="button" id="log-toggle" aria-controls="log-list" aria-expanded="true">Events</button>
+    <span class="log-count" id="log-count">0</span>
+  </div>
+  <ol class="log-list num" id="log-list" role="log"></ol>
+</footer>
+
 </body>
 </html>

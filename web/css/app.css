@@ -1,0 +1,476 @@
+/* Gözcü GCS: one dark, navy-and-black cockpit style.
+   Meaning colours are never used alone: every coloured value also carries text. */
+
+:root {
+  color-scheme: dark;
+
+  /* Palette */
+  --black: #000000;
+  --surface: #050D1F; /* page */
+  --panel: #0B1F4B;
+  --line: #16306B;
+  --line-strong: #1B3F8B;
+  --accent: #7FB2FF; /* signal blue: focus, selection, neutral emphasis */
+  --text: #E8EEFA;
+  --text-dim: #A9BEE6;
+  --text-stale: #7E90B8; /* still readable on --panel (about 5:1) */
+
+  /* Meaning */
+  --ok: #5DD39E; /* green: link healthy, clear of conflict */
+  --caution: #F2B544; /* amber: caution (warn level, advisory) */
+  --alarm: #FF6B6B; /* red: warning (crit level, avoid, link lost) */
+  --on-signal: #000000; /* text on a coloured badge */
+
+  --font-ui: system-ui, "Ubuntu", "Segoe UI", sans-serif;
+  --font-num: ui-monospace, "DejaVu Sans Mono", "Ubuntu Mono", monospace;
+  --gap: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--surface);
+  color: var(--text);
+  font: 14px/1.35 var(--font-ui);
+}
+
+h2,
+h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button:disabled {
+  color: var(--text-stale);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+/* Badges: a state shown as coloured text in a box */
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.badge[data-level="ok"] {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--on-signal);
+}
+
+.badge[data-level="warn"] {
+  background: var(--caution);
+  border-color: var(--caution);
+  color: var(--on-signal);
+}
+
+.badge[data-level="crit"] {
+  background: var(--alarm);
+  border-color: var(--alarm);
+  color: var(--on-signal);
+}
+
+/* One telemetry value (see js/fields.js): value, WARN/CRIT tag, age when stale */
+
+.field {
+  white-space: nowrap;
+}
+
+.field .tag:empty,
+.field .age:empty,
+.field.is-empty[data-optional] {
+  display: none;
+}
+
+.field .tag {
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font: 700 10px var(--font-ui);
+  letter-spacing: 0.04em;
+  color: var(--on-signal);
+  vertical-align: 1px;
+}
+
+.field[data-level="warn"] .v {
+  color: var(--caution);
+}
+
+.field[data-level="warn"] .tag {
+  background: var(--caution);
+}
+
+.field[data-level="crit"] .v {
+  color: var(--alarm);
+}
+
+.field[data-level="crit"] .tag {
+  background: var(--alarm);
+}
+
+.field.is-stale .v {
+  color: var(--text-stale);
+}
+
+.field .age {
+  margin-left: 5px;
+  font-size: 11px;
+  color: var(--text-stale);
+}
+
+/* Top bar */
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 22px;
+  padding: 6px 12px;
+  background: var(--black);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.brand span {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.tb-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tb-item .label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.tb-item .value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.tb-item .sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.armed.is-armed .v {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-signal);
+  font-weight: 700;
+}
+
+/* Main area: telemetry | video and map | Gözcü */
+
+.main {
+  display: grid;
+  grid-template-columns: minmax(190px, 15rem) minmax(0, 1fr) minmax(270px, 22rem);
+  gap: var(--gap);
+  padding: var(--gap);
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.panel > h2 {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--text-stale);
+}
+
+.center {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--gap);
+  min-height: 0;
+}
+
+.center.is-swapped .view[data-view="video"] {
+  order: 2;
+}
+
+.center[data-enlarged="video"],
+.center[data-enlarged="map"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.center[data-enlarged="video"] .view[data-view="map"],
+.center[data-enlarged="map"] .view[data-view="video"] {
+  display: none;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--black);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px 3px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+
+.view-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.view-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.view-body > canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Gözcü panel */
+
+.gozcu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gozcu section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.threat {
+  padding: 10px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.readout {
+  color: var(--text-dim);
+}
+
+.tracks {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tracks th,
+.tracks td {
+  padding: 2px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.tracks th:first-child,
+.tracks td:first-child {
+  text-align: left;
+}
+
+.tracks th {
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.tracks .empty {
+  text-align: center;
+  color: var(--text-stale);
+}
+
+.health {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.health dt {
+  color: var(--text-dim);
+}
+
+.health dd {
+  margin: 0;
+  text-align: right;
+}
+
+/* Event log along the bottom */
+
+.log {
+  background: var(--black);
+  border-top: 1px solid var(--line-strong);
+}
+
+.log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+}
+
+.log-count {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.log-list {
+  height: 9.5rem;
+  margin: 0;
+  padding: 0 12px 6px;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.log.is-folded .log-list {
+  display: none;
+}
+
+.log-list li {
+  display: grid;
+  grid-template-columns: 5.5em 7em 5.5em minmax(0, 1fr);
+  gap: 10px;
+  padding: 1px 0;
+  border-bottom: 1px solid #0a1730;
+}
+
+.log-list .time,
+.log-list .src {
+  color: var(--text-dim);
+}
+
+.log-list .text {
+  overflow-wrap: anywhere;
+}
+
+.log-list li[data-level="warn"] .sev {
+  color: var(--caution);
+}
+
+.log-list li[data-level="crit"] .sev {
+  color: var(--alarm);
+  font-weight: 700;
+}
+
+/* Narrow screens: one column, and the page scrolls */
+
+@media (max-width: 1000px) {
+  html,
+  body {
+    height: auto;
+  }
+
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .center {
+    grid-template-rows: 55vh 55vh;
+  }
+
+  .center[data-enlarged="video"],
+  .center[data-enlarged="map"] {
+    grid-template-rows: 75vh;
+  }
+}
