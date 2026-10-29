@@ -2,6 +2,16 @@
 
 const TAGS = { warn: "WARN", crit: "CRIT" };
 
+/** What a field shows before the first snapshot, so nothing is ever blank. */
+export const WAITING = {
+  value: null,
+  text: "—",
+  reason: "no data from the ground station yet",
+  age: null,
+  stale: true,
+  level: null,
+};
+
 /** Seconds as a short age, e.g. "12 s", "3 min". */
 export function formatAge(seconds) {
   if (seconds < 60) return `${Math.round(seconds)} s`;
@@ -23,7 +33,9 @@ export function showField(element, field) {
   }
   const [value, tag, age] = element.children;
   const unit = element.dataset.unit;
-  value.textContent = unit && field.value !== null ? `${field.text} ${unit}` : field.text;
+  if (!unit || field.value === null) value.textContent = field.text;
+  else if (unit === "°") value.textContent = `${field.text}°`; // an angle takes no space
+  else value.textContent = `${field.text} ${unit}`;
   element.classList.toggle("is-empty", field.value === null);
   const level = field.stale ? "" : (field.level ?? "");
   element.dataset.level = level;

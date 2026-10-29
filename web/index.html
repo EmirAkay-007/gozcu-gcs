@@ -71,9 +71,24 @@
 </header>
 
 <main class="main">
-  <aside class="panel" aria-labelledby="telemetry-title">
-    <h2 id="telemetry-title">Telemetry</h2>
-    <div class="panel-body placeholder">Widgets arrive in roadmap step 4.</div>
+  <aside class="panel telemetry" id="telemetry" aria-labelledby="telemetry-title">
+    <div class="panel-head">
+      <h2 id="telemetry-title">Telemetry</h2>
+      <div class="panel-tools">
+        <button type="button" id="reset-pins" hidden title="Pin the default widgets again">Reset</button>
+        <button type="button" id="customize" aria-pressed="false" title="Choose the pinned widgets">Customize</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="attitude"><canvas id="attitude-canvas" aria-label="Attitude indicator"></canvas></div>
+      <ol class="widgets pinned" id="pinned">
+        <li class="w-waiting">Waiting for the ground station…</li>
+      </ol>
+      <details class="more">
+        <summary>More <span id="more-count"></span></summary>
+        <ol class="widgets" id="more-list"></ol>
+      </details>
+    </div>
   </aside>
 
   <section class="center" id="center" aria-label="Video and map">
@@ -154,7 +169,17 @@
 <footer class="log" id="log">
   <div class="log-head">
     <button type="button" id="log-toggle" aria-controls="log-list" aria-expanded="true">Events</button>
-    <span class="log-count" id="log-count">0</span>
+    <select id="log-severity" aria-label="Lowest severity shown">
+      <option value="7">All severities</option>
+      <option value="5">Notice and above</option>
+      <option value="4">Warnings and above</option>
+      <option value="3">Errors and above</option>
+    </select>
+    <select id="log-source" aria-label="Source">
+      <option value="">All sources</option>
+    </select>
+    <input type="search" id="log-search" placeholder="Search events" aria-label="Search events">
+    <span class="log-count" id="log-count">0 events</span>
   </div>
   <ol class="log-list num" id="log-list" role="log"></ol>
 </footer>

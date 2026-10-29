@@ -1,7 +1,7 @@
 // The top bar: link health, vehicle, mode, arm state, GPS, battery and the clock.
 // Every element with data-key shows the snapshot field of that name.
 
-import { markStale, showField } from "./fields.js";
+import { WAITING, markStale, showField } from "./fields.js";
 
 const LINK_STATES = {
   CONNECTED: { text: "CONNECTED", level: "ok" },
@@ -10,15 +10,6 @@ const LINK_STATES = {
   LINK_LOST: { text: "LINK LOST", level: "crit" },
 };
 const SERVER_OFFLINE = { text: "GCS OFFLINE", level: "crit" };
-// Shown until the first snapshot, so no item is ever blank.
-const WAITING = {
-  value: null,
-  text: "—",
-  reason: "no data from the ground station yet",
-  age: null,
-  stale: true,
-  level: null,
-};
 
 const CLOCK = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",

@@ -42,6 +42,13 @@ body {
   background: var(--surface);
   color: var(--text);
   font: 14px/1.35 var(--font-ui);
+  accent-color: var(--accent); /* check boxes */
+}
+
+* {
+  /* Thin navy scroll bars, in every browser rather than the default white */
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
 }
 
 h2,
@@ -83,6 +90,28 @@ button:disabled {
   color: var(--text-stale);
   border-color: var(--line);
   cursor: not-allowed;
+}
+
+button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+select,
+input[type="search"] {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Badges: a state shown as coloured text in a box */
@@ -249,6 +278,110 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px 3px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-tools {
+  display: flex;
+  gap: 4px;
+}
+
+/* Telemetry panel: attitude, pinned widgets, the rest under "More" */
+
+.attitude {
+  position: relative;
+  height: 128px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.attitude > canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.widgets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.widget {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.w-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.w-value {
+  justify-self: end;
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.pinned .w-value {
+  font-size: 18px;
+}
+
+.w-waiting {
+  padding: 8px 0;
+  color: var(--text-stale);
+}
+
+.w-reason {
+  grid-column: 1 / -1;
+  justify-self: end;
+  font-size: 11px;
+  color: var(--text-stale);
+}
+
+.w-reason:empty,
+.w-pin {
+  display: none;
+}
+
+.is-customizing .w-pin {
+  display: block;
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.more {
+  margin-top: 8px;
+}
+
+.more summary {
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.more summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .panel-body {
   flex: 1;
   min-height: 0;
@@ -404,9 +537,14 @@ button:disabled {
 
 .log-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
   padding: 4px 12px;
+}
+
+.log-head input[type="search"] {
+  width: 14rem;
 }
 
 .log-count {
@@ -425,6 +563,10 @@ button:disabled {
 
 .log.is-folded .log-list {
   display: none;
+}
+
+.log-list li[hidden] {
+  display: none; /* the grid below would otherwise override [hidden] */
 }
 
 .log-list li {

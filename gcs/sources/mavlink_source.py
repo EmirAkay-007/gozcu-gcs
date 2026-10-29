@@ -13,6 +13,7 @@ LINK_LOST, and the connection is reopened only when the transport itself fails.
 
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -23,6 +24,7 @@ from gcs.intervals import IntervalRequest, IntervalRequester, send_interval_requ
 from gcs.link_stats import PacketLossMeter, RateMeter
 from gcs.mav import enum_name, mavlink, open_link
 from gcs.state import TelemetryState
+from gcs.statustext import StatusTextAssembler
 
 # Link states, as published in snapshot["link"]["state"]
 CONNECTING = "CONNECTING"  # no transport: opening it, or waiting to try again
@@ -37,6 +39,7 @@ RETRY_MIN_S = 1.0  # first wait before reopening a failed link, doubled up to RE
 RETRY_MAX_S = 5.0
 REBOOT_JUMP_MS = 1000  # the vehicle clock going back by more than this means a reboot
 NO_VEHICLE_HINT_S = 3.0  # how long a new link may stay without an autopilot before we say why
+EARLY_TEXTS_KEPT = 20  # STATUSTEXTs held while the vehicle is not known yet
 VEHICLE = "vehicle"  # RateMeter key for all traffic from the vehicle
 
 Publish = Callable[[dict[str, Any]], None]
@@ -122,6 +125,8 @@ class MavlinkSource:
             self._report_rejected_requests()
             self._update_link_state(now)
             self._explain_missing_vehicle(now)
+            for severity, text in self._statustexts.expire(now):
+                self._event("vehicle", enum_name("MAV_SEVERITY", severity), text)
             self._tick(now)
             msg = conn.recv_match(blocking=True, timeout=RECV_TIMEOUT_S)
             if msg is None:
@@ -164,6 +169,11 @@ class MavlinkSource:
         self._messages = 0  # readable MAVLink messages from anyone
         self._unreadable = 0  # chunks the parser rejected (CRC or framing errors)
         self._hint_given = False
+        self._statustexts = StatusTextAssembler()
+        # (source, message, time) of texts that arrived before the first vehicle heartbeat
+        self._early_texts: deque[tuple[tuple[int, int], Any, float]] = deque(
+            maxlen=EARLY_TEXTS_KEPT
+        )
 
     # Sending
 
@@ -187,6 +197,10 @@ class MavlinkSource:
         if self._vehicle is None and kind == "HEARTBEAT" and self._is_autopilot(msg, src):
             self._lock_on(msg, src, now)
         if src != self._vehicle:
+            if self._vehicle is None and kind == "STATUSTEXT":
+                # The autopilot may speak before its first heartbeat: keep the text
+                # until we know whether it came from the vehicle.
+                self._early_texts.append((src, msg, now))
             return  # MAVProxy, the companion computer, ...: not the vehicle
         self._loss.add(msg.get_seq(), now)
         self._rates.add(VEHICLE, now)
@@ -198,8 +212,7 @@ class MavlinkSource:
         elif kind == "COMMAND_ACK":
             self._on_command_ack(msg, now)
         elif kind == "STATUSTEXT":
-            # Texts over 50 characters arrive in chunks; reassembly comes with the event log.
-            self._event("vehicle", enum_name("MAV_SEVERITY", msg.severity), msg.text)
+            self._on_statustext(msg, now)
 
     def _is_autopilot(self, msg: Any, src: tuple[int, int]) -> bool:
         return src[1] == self.config.target_compid and is_vehicle_heartbeat(msg)
@@ -213,6 +226,16 @@ class MavlinkSource:
             f"{enum_name('MAV_AUTOPILOT', msg.autopilot)}",
         )
         self._requests.start(now)
+        for early_src, early_msg, received in self._early_texts:
+            if early_src == src:
+                self._on_statustext(early_msg, received)
+        self._early_texts.clear()
+
+    def _on_statustext(self, msg: Any, now: float) -> None:
+        whole = self._statustexts.add(msg, now)  # long texts arrive in chunks
+        if whole is not None:
+            severity, text = whole
+            self._event("vehicle", enum_name("MAV_SEVERITY", severity), text)
 
     def _on_heartbeat(self, msg: Any, now: float) -> None:
         mode, armed = mode_name(msg), is_armed(msg)

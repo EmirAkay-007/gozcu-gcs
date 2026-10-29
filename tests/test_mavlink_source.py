@@ -1,6 +1,7 @@
 """MavlinkSource end to end, against a stand-in autopilot on a local TCP port."""
 
 import math
+import queue
 import socket
 import threading
 import time
@@ -33,6 +34,17 @@ class SocketFile:
         self.sock.sendall(data)
 
 
+def send_text(mav, severity, text):
+    """Send a STATUSTEXT the way ArduPilot does: 50-byte chunks under one id when long."""
+    raw = text.encode("utf-8")
+    msg_id = 0 if len(raw) <= 50 else 9
+    for seq in range(256):
+        piece, raw = raw[:50], raw[50:]
+        mav.statustext_send(severity, piece, msg_id, seq)
+        if msg_id == 0 or len(piece) < 50:
+            return
+
+
 class FakeAutopilot:
     """Just enough of ArduPilot to drive MavlinkSource.
 
@@ -49,9 +61,14 @@ class FakeAutopilot:
         self._hang_up = threading.Event()
         self._quiet = threading.Event()
         self._reboot = threading.Event()
+        self._texts = queue.SimpleQueue()  # STATUSTEXTs waiting to be sent
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def say(self, text, severity=mavlink.MAV_SEVERITY_WARNING):
+        """Send a STATUSTEXT, in chunks if it is longer than one packet."""
+        self._texts.put((severity, text))
 
     def hang_up(self):
         """Close the current connection."""
@@ -60,6 +77,10 @@ class FakeAutopilot:
     def go_quiet(self):
         """Stop sending heartbeats but keep the connection."""
         self._quiet.set()
+
+    def resume(self):
+        """Send heartbeats again."""
+        self._quiet.clear()
 
     def reboot(self):
         """Restart the vehicle clock from zero, as a rebooted autopilot does."""
@@ -104,6 +125,8 @@ class FakeAutopilot:
                     next_heartbeat = now + 1.0
                 boot_ms += 100
                 mav.attitude_send(boot_ms, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0)
+                while not self._texts.empty():
+                    send_text(mav, *self._texts.get())
                 data = client.recv(4096)
                 if not data:
                     return
@@ -225,6 +248,24 @@ def test_rates_are_requested_again_after_a_vehicle_reboot(autopilot, run_source)
     autopilot.reboot()
     wait_for(lambda: len(autopilot.requested) == 2 * len(ALL_REQUESTS))
     assert "vehicle rebooted; requesting message rates again" in events(published)
+
+
+def test_a_long_vehicle_message_reaches_the_log_in_one_piece(autopilot, run_source):
+    text = "PreArm: Battery 1 below minimum arming voltage; check BATT_ARM_VOLT (güç)"
+    published = run_source(connection=autopilot.url)
+    wait_for(lambda: link_state(published) == CONNECTED)
+    autopilot.say(text)
+    wait_for(lambda: text in events(published))
+
+
+def test_a_text_sent_before_the_first_heartbeat_is_not_lost(autopilot, run_source):
+    autopilot.go_quiet()  # no heartbeat yet, so the vehicle is not known...
+    published = run_source(connection=autopilot.url)
+    wait_for(lambda: link_state(published) == NO_VEHICLE)
+    autopilot.say("PreArm: Throttle below failsafe")
+    time.sleep(0.3)  # ...while the text goes out
+    autopilot.resume()
+    wait_for(lambda: "PreArm: Throttle below failsafe" in events(published))
 
 
 def test_a_message_that_cannot_be_handled_does_not_stop_the_telemetry(
