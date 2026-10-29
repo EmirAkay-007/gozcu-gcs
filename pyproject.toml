@@ -12,12 +12,18 @@ requires-python = ">=3.12"
 # upgrade on purpose.
 dependencies = [
     "pymavlink==2.4.50",
+    "fastapi==0.162.0",
+    # FastAPI accepts any newer Starlette, whose routing and static files we rely on.
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
+    "websockets==17.3",  # uvicorn's WebSocket support
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==9.1.1",
     "ruff==0.17.3",
+    "httpx2==2.16.0",  # Starlette's TestClient (it deprecates the older httpx)
 ]
 
 [tool.setuptools.packages.find]

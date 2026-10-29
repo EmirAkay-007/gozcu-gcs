@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gözcü GCS</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 16px; background: #050D1F; color: #E8EEFA; font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; color: #A9BEE6; }
+  .note { color: #A9BEE6; margin-top: 0; }
+  .columns { display: flex; flex-wrap: wrap; gap: 32px; }
+  table { border-collapse: collapse; }
+  th, td { padding: 2px 10px; border-bottom: 1px solid #16306B; text-align: left; }
+  .num, ul { font-family: ui-monospace, "DejaVu Sans Mono", monospace; }
+  .num { text-align: right; }
+  .stale { color: #6B7FA8; }
+  ul { padding-left: 0; list-style: none; max-width: 70ch; }
+</style>
+</head>
+<body>
+<h1>Gözcü GCS</h1>
+<p class="note">Temporary page (roadmap step 2b): the raw data the interface will be built on.</p>
+<p>
+  Server: <span id="server">connecting…</span> ·
+  Link: <span id="link">—</span> ·
+  Snapshot <span id="seq">—</span> (<span id="rate">—</span> per s)
+</p>
+<div class="columns">
+  <section>
+    <h2>Fields</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Value</th><th>Unit</th><th>Age (s)</th><th>Note</th></tr></thead>
+      <tbody id="fields"></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Events, newest first</h2>
+    <ul id="events"></ul>
+  </section>
+</div>
+<script type="module">
+  import { Transport } from "./js/transport.js";
+
+  const MAX_EVENTS = 100;
+  const rows = new Map(); // field key -> its table cells
+  const byId = (id) => document.getElementById(id);
+
+  function addCell(row, text, className = "") {
+    const cell = row.insertCell();
+    cell.textContent = text;
+    cell.className = className;
+    return cell;
+  }
+
+  function onHello(hello) {
+    // Rebuilt on every (re)connect; the server replays its recent events after this.
+    byId("fields").replaceChildren();
+    byId("events").replaceChildren();
+    rows.clear();
+    for (const field of hello.fields) {
+      const row = byId("fields").insertRow();
+      addCell(row, field.label);
+      rows.set(field.key, {
+        row,
+        value: addCell(row, "—", "num"),
+        unit: addCell(row, field.unit),
+        age: addCell(row, "", "num"),
+        note: addCell(row, ""),
+      });
+    }
+  }
+
+  let received = 0;
+  let countingSince = performance.now();
+
+  function onSnapshot(snapshot) {
+    const { link } = snapshot;
+    byId("link").textContent = link.vehicle
+      ? `${link.state} · ${link.vehicle.type} ${link.vehicle.sysid}/${link.vehicle.compid}`
+      : link.state;
+    byId("seq").textContent = snapshot.seq;
+    for (const [key, field] of Object.entries(snapshot.fields)) {
+      const cells = rows.get(key);
+      if (!cells) continue;
+      cells.value.textContent = field.text;
+      cells.age.textContent = field.age === null ? "" : field.age.toFixed(1);
+      cells.note.textContent = [field.stale ? "STALE" : "", field.level?.toUpperCase(), field.reason]
+        .filter(Boolean)
+        .join(" · ");
+      cells.row.className = field.stale ? "stale" : "";
+    }
+    received += 1;
+    const seconds = (performance.now() - countingSince) / 1000;
+    if (seconds >= 2) {
+      byId("rate").textContent = (received / seconds).toFixed(1);
+      received = 0;
+      countingSince = performance.now();
+    }
+  }
+
+  function onEvent(event) {
+    const item = document.createElement("li");
+    const time = new Date(event.time * 1000).toLocaleTimeString();
+    item.textContent = `${time}  ${event.severity}  [${event.source}]  ${event.text}`;
+    const list = byId("events");
+    list.prepend(item);
+    while (list.children.length > MAX_EVENTS) list.lastChild.remove();
+  }
+
+  new Transport()
+    .on("hello", onHello)
+    .on("snapshot", onSnapshot)
+    .on("event", onEvent)
+    .onStatus((connected) => {
+      byId("server").textContent = connected ? "connected" : "disconnected, retrying…";
+    })
+    .start();
+</script>
+</body>
+</html>

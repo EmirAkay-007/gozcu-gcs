@@ -19,3 +19,12 @@ python3 -m venv .venv
 
 `-E` makes Python ignore `PYTHONPATH`. Where ROS is sourced, that variable points at ROS's
 Python packages, which would otherwise leak into this project's environment.
+
+## Running
+
+```bash
+.venv/bin/python -E -m gcs                     # then open http://127.0.0.1:8000
+```
+
+Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
+`--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`.
