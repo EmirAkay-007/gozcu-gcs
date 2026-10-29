@@ -1,0 +1,1 @@
+"""Gözcü ground control station."""
