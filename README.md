@@ -7,6 +7,20 @@ It shows live telemetry, the camera feed, a map and the Gözcü threat state, pa
 > against ArduPlane SITL with Gazebo (Gözcü played by `tools/fake_gozcu.py`), the commands to
 > the autopilot so far against a stand-in; nothing yet against the UNO Q board.
 
+## Quick start
+
+On Ubuntu 24.04 (Python 3.12), with `sudo apt install python3-venv ffmpeg`:
+
+```bash
+git clone https://github.com/EmirAkay-007/gozcu-gcs.git && cd gozcu-gcs
+./start.sh                                     # then open http://127.0.0.1:8000
+```
+
+The first run installs the station into `.venv` (this needs the internet), and so does the
+first run after `pyproject.toml` changes; every run starts it, connected to SITL at
+`tcp:127.0.0.1:5762`. `./start.sh` takes the options of `python -m gcs`, e.g.
+`./start.sh --conn /dev/ttyUSB0,57600` for a telemetry radio (see Running).
+
 ## Development
 
 Requires Python 3.12; the simulator side uses ArduPilot SITL with Gazebo.
@@ -39,7 +53,7 @@ no tiles and nothing is recorded, so it can run beside the simulator and a runni
 ## Running
 
 ```bash
-.venv/bin/python -E -m gcs                     # then open http://127.0.0.1:8000
+./start.sh                                     # or: .venv/bin/python -E -m gcs
 ```
 
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
@@ -49,8 +63,11 @@ link's telemetry stops); it suggests the links used before, the serial ports pre
 the usual SITL ports. Over a telemetry radio
 plugged in by USB: `--conn /dev/ttyUSB0,57600` (its port and baud rate; on Linux the user
 must be in the `dialout` group). Gözcü's reports reach the ground station on any of these
-links, because the autopilot passes them on from the port the MCU is connected to. After an
-update, restart the station and reload the page.
+links, because the autopilot passes them on from the port the MCU is connected to.
+
+After an update, restart the station and reload the page. The page reads its files from the
+station's folder, so it says so at the top when the two no longer belong together: when the
+station was not restarted, or when the page was loaded before it was.
 
 ## Safety
 
@@ -147,6 +164,9 @@ and, twice a second, the value of every field (`null` when unknown or stale): ab
 ## When something is wrong
 
 The station says what it knows in the event log and on the panel concerned. The usual cases:
+
+- **"gcs: cannot listen on http://127.0.0.1:8000"**: a station is already running there (it
+  says so) or another program has the port. Use or stop that one, or start with `--port`.
 
 - **NO VEHICLE, "no MAVLink data on tcp:127.0.0.1:5762 yet"**: another program holds that
   port (SITL serves one client per port), or the simulation is paused. Close the other

@@ -130,6 +130,37 @@ def test_the_sources_run_as_long_as_the_server():
     assert not videos[0].running
 
 
+def test_a_browser_learns_the_build_and_whether_its_files_changed_since(monkeypatch):
+    from gcs import server
+
+    builds = iter(["one", "one", "two"])  # at the start, then as each browser connects
+    monkeypatch.setattr(server, "code_fingerprint", lambda: next(builds))
+    app, _, _ = make_app()
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            first = ws.receive_json()
+        with client.websocket_connect("/ws") as ws:
+            second = ws.receive_json()  # the files were updated meanwhile
+    assert (first["build"], first["updated"]) == ("one", False)
+    assert (second["build"], second["updated"]) == ("one", True)
+
+
+def test_the_fingerprint_follows_the_files_but_not_caches_or_editors(tmp_path):
+    from gcs.server import code_fingerprint
+
+    code, web = tmp_path / "gcs", tmp_path / "web"
+    (code / "__pycache__").mkdir(parents=True)
+    web.mkdir()
+    (code / "server.py").write_text("x = 1\n", encoding="utf-8")
+    (web / "app.js").write_text("// one\n", encoding="utf-8")
+    before = code_fingerprint((code, web))
+    (code / "__pycache__" / "server.cpython-312.pyc").write_bytes(b"cache")
+    (web / ".app.js.swp").write_bytes(b"editor")
+    assert code_fingerprint((code, web)) == before
+    (web / "app.js").write_text("// two!\n", encoding="utf-8")
+    assert code_fingerprint((code, web)) != before
+
+
 def test_the_page_is_served_and_does_not_hide_the_websocket():
     app, _, _ = make_app()
     with TestClient(app) as client:

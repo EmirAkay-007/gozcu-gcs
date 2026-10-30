@@ -54,6 +54,7 @@ STATE = """(() => {
   const ray = (path) =>
     path.classList.contains("is-target") ? `target ${path.dataset.level}` : "track";
   return JSON.stringify({
+    notice: byId("station-notice").hidden ? "" : text("station-notice"),
     link: text("link-state"),
     vehicle: text("vehicle"),
     mode: value("#topbar [data-key='mode']"),
@@ -297,8 +298,15 @@ def wait(browser: Browser, condition: Callable[[dict[str, Any]], bool], timeout_
         time.sleep(0.2)
 
 
-def marks(browser: Browser) -> dict[str, int]:
-    return json.loads(browser.evaluate(MARKS))
+def marks(browser: Browser, condition: Callable[[dict[str, int]], bool]) -> dict[str, int]:
+    """The marks' pixels once condition holds for them, or after 2 s: the picture takes
+    a change in only with the next frame drawn."""
+    deadline = time.monotonic() + 2.0
+    while True:
+        seen = json.loads(browser.evaluate(MARKS))
+        if condition(seen) or time.monotonic() >= deadline:
+            return seen
+        time.sleep(0.1)
 
 
 def choose_mode(browser: Browser, mode: str) -> None:
@@ -318,6 +326,7 @@ def check_start(browser: Browser, report: Report, camera: bool) -> None:
         state["link"] == "CONNECTED" and state["vehicle"] == "FIXED_WING 1/1",
         f"link {state['link']}, vehicle {state['vehicle']}",
     )
+    report.check("the page and the station belong together", state["notice"] == "", state["notice"])
     if not camera:
         report.skip("the camera picture arrives", "no ffmpeg with libx264 to make a stream")
         return
@@ -436,12 +445,12 @@ def check_gozcu(
         state["rays"],
     )
     if camera:
-        seen = marks(browser)
+        seen = marks(browser, lambda m: m["caution"] > MARKED_PX and m["accent"] > MARKED_PX)
         marked = seen["caution"] > MARKED_PX and seen["accent"] > MARKED_PX
         report.check("each track is marked on the picture, the target in amber", marked, seen)
         browser.press("#video-overlay")
-        time.sleep(0.6)  # a few frames
-        hidden, state = marks(browser), page(browser)
+        hidden = marks(browser, lambda m: sum(m.values()) == 0)
+        state = page(browser)
         browser.press("#video-overlay")
         report.check(
             "Overlay takes the marks off the picture, not the rays off the map",
@@ -480,7 +489,7 @@ def check_gozcu(
         f"rays {state['rays']}, label {state['rayLabel']!r}",
     )
     if camera:
-        seen = marks(browser)
+        seen = marks(browser, lambda m: m["alarm"] > MARKED_PX)
         report.check("in AVOID the target's mark turns red", seen["alarm"] > MARKED_PX, seen)
     report.check(
         "while Gözcü avoids, commands to the autopilot are held",

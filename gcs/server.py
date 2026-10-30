@@ -7,11 +7,17 @@ the recent events and the newest snapshot and video status, then everything as
 it arrives. A slow browser never holds up the others: it may skip snapshots and
 statuses, since only the newest one matters, but it receives every event.
 
+The hello also says which build of the station runs and whether its files have
+changed since it started: the page's files are read from disk when asked for,
+so after an update a station that was not restarted hands out new pages to go
+with its old code, and the page has to say so (web/js/build.js).
+
 Video frames go over a WebSocket of their own (/ws/video), so a picture of tens
 of kilobytes never delays telemetry; there too a slow browser skips frames.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -36,6 +42,7 @@ from gcs.vehicle_commands import FLY_ALT_M, MODES
 from gcs.video import VideoSource, video_status
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+CODE = (Path(__file__).resolve().parent, WEB_DIR)  # the station's own files
 RECENT_EVENTS = 200  # replayed to a browser that connects later
 CLIENT_EVENT_BACKLOG = 1000  # events a stalled browser may fall behind before the oldest go
 # Replaced by newer ones of their kind; the rest are events.
@@ -53,6 +60,26 @@ def encode(item: dict[str, Any]) -> str:
     """JSON text for the browser. NaN or Infinity would make JSON.parse reject the
     whole message, so they are refused here instead."""
     return json.dumps(item, allow_nan=False, ensure_ascii=False, separators=(",", ":"))
+
+
+def code_fingerprint(folders: tuple[Path, ...] = CODE) -> str:
+    """A short digest of the names, sizes and times of the files in folders, which
+    changes when any of them does, as after an update."""
+    digest = hashlib.sha256()
+    for folder in folders:
+        for path in sorted(folder.rglob("*")):
+            relative = path.relative_to(folder)
+            if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+                continue  # Python's caches and editors' files come and go by themselves
+            if not path.is_file():
+                continue
+            try:
+                info = path.stat()
+            except OSError:
+                continue  # gone since the folder was listed
+            line = f"{folder.name}/{relative}\0{info.st_size}\0{info.st_mtime_ns}\n"
+            digest.update(line.encode())
+    return digest.hexdigest()[:12]
 
 
 class Client:
@@ -86,7 +113,7 @@ class Hub:
     """Fans out what the sources publish to every connected browser (event loop only)."""
 
     def __init__(self, hello: dict[str, Any]) -> None:
-        self.hello = encode(hello)
+        self.hello = hello  # completed for each browser as it connects
         self._clients: set[Client] = set()
         self._recent_events: deque[str] = deque(maxlen=RECENT_EVENTS)
         self._states: dict[str, str] = {}
@@ -254,10 +281,12 @@ def create_app(
     source_factory: SourceFactory = MavlinkSource,
     video_factory: VideoFactory = VideoSource,
 ) -> FastAPI:
+    build = code_fingerprint()  # the files this station started with
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         loop = asyncio.get_running_loop()
-        hub, frames = Hub(hello_message(config)), Frames()
+        hub, frames = Hub({**hello_message(config), "build": build}), Frames()
         app.state.hub, app.state.frames = hub, frames
         publish = make_publish(loop, hub)
         publish, recorder = start_recording(config, publish)
@@ -295,13 +324,15 @@ def create_app(
             return
         await websocket.accept()
         hub: Hub = websocket.app.state.hub
+        files = await asyncio.to_thread(code_fingerprint)
+        hello = encode({**hub.hello, "updated": files != hub.hello["build"]})
         client = hub.join()
 
         async def handle(text: str) -> None:
             await _request(websocket.app, text)
 
         try:
-            await _until_closed(websocket, _stream(websocket, hub.hello, client), handle)
+            await _until_closed(websocket, _stream(websocket, hello, client), handle)
         finally:
             hub.leave(client)
 

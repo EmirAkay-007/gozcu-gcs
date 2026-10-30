@@ -4,6 +4,7 @@
 // its error is logged (once) and the rest of the page carries on.
 
 import { AttitudeIndicator } from "./attitude.js";
+import { buildNotice } from "./build.js";
 import { ConnectionBox } from "./connection.js";
 import { FlyHere } from "./flyto.js";
 import { GozcuPanel } from "./gozcu.js";
@@ -88,11 +89,21 @@ function each(parts) {
 }
 
 let wasConnected = false;
+let firstBuild = null; // of the first station met up to date (build.js)
+
+/** Say whether the page and the station belong together, above everything else. */
+function checkBuild(hello) {
+  const notice = byId("station-notice");
+  notice.textContent = buildNotice(hello, firstBuild);
+  notice.hidden = notice.textContent === "";
+  if (hello.build !== undefined && !hello.updated) firstBuild ??= hello.build;
+}
 
 station
   .on("hello", (hello) => {
     eventLog.clear(); // the server replays its recent events next
     each([
+      ["top bar", () => checkBuild(hello)],
       ["telemetry", () => telemetry.build(hello.fields)],
       ["vehicle", () => vehicle.configure(hello.control)],
       ["map", () => map.configure(hello.map)],

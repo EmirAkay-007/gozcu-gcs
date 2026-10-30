@@ -252,6 +252,19 @@ input:focus-visible {
   width: 12rem; /* "/dev/ttyUSB0,57600" with room to spare; a longer one scrolls */
 }
 
+.station-notice {
+  flex-basis: 100%; /* a line of its own */
+  padding: 3px 8px;
+  border: 1px solid var(--caution);
+  border-radius: 3px;
+  color: var(--caution);
+  font-weight: 600;
+}
+
+.station-notice[hidden] {
+  display: none;
+}
+
 .armed.is-armed .v {
   padding: 0 6px;
   border-radius: 3px;
