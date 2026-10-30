@@ -31,6 +31,7 @@ const video = new VideoPanel({
   canvas: byId("video-canvas"),
   info: byId("video-info"),
   record: byId("video-rec"),
+  overlay: byId("video-overlay"),
   onRecord: (on) => station.send({ type: "video_recording", on }),
 });
 setUpLayout(document);
@@ -42,13 +43,16 @@ station
     eventLog.clear(); // the server replays its recent events next
     telemetry.build(hello.fields);
     map.configure(hello.map);
+    video.configure(hello.video);
   })
   .on("snapshot", (snapshot) => {
     topBar.update(snapshot);
     telemetry.update(snapshot);
     attitude.update(snapshot.fields);
     map.update(snapshot.fields);
+    map.showTracks(snapshot.gozcu);
     gozcu.update(snapshot.gozcu);
+    video.setGozcu(snapshot.gozcu);
   })
   .on("video", (status) => video.update(status))
   .on("event", (event) => eventLog.add(event))

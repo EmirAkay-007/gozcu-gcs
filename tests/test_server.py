@@ -90,6 +90,7 @@ def test_a_browser_gets_the_field_list_then_live_data():
         assert airspeed in hello["fields"]
         assert hello["map"]["tile_url"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         assert "OpenStreetMap" in hello["map"]["attribution"]
+        assert hello["video"] == {"hfov_deg": 64.7}
         sources[0].publish(EVENT)
         assert ws.receive_json() == EVENT
         sources[0].publish(SNAPSHOT)

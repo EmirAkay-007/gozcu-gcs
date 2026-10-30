@@ -156,14 +156,16 @@ class Frames:
 
 
 def hello_message(config: Config) -> dict[str, Any]:
-    """Sent first to every browser: the fields it can show, in registry order, and the map."""
+    """Sent first to every browser: the fields it can show, in registry order, the map,
+    and the camera's field of view (to mark Gözcü's tracks on the picture)."""
     fields = [{"key": f.key, "label": f.label, "unit": f.unit, "pinned": f.pinned} for f in FIELDS]
     map_settings = {
         "tile_url": config.map.tile_url,
         "attribution": config.map.attribution,
         "max_zoom": config.map.max_zoom,
     }
-    return {"type": "hello", "fields": fields, "map": map_settings}
+    video = {"hfov_deg": config.video.hfov_deg}
+    return {"type": "hello", "fields": fields, "map": map_settings, "video": video}
 
 
 def make_publish(loop: asyncio.AbstractEventLoop, hub: Hub) -> Publish:

@@ -5,16 +5,23 @@
 // so without tiles (no internet, or none configured) the track and the vehicle
 // still read correctly. "Follow" keeps the vehicle in the middle until the map
 // is dragged.
+//
+// Gözcü's tracks have a bearing but no range, so each is drawn as a ray from the
+// vehicle along that bearing, of the same length on the screen at every zoom.
 
 import * as L from "../vendor/leaflet/leaflet-src.esm.js";
 import { formatAge } from "./fields.js";
-import { Trail } from "./geo.js";
+import { Trail, destination, metresPerPixel } from "./geo.js";
+import { trackLabel, trackMarks } from "./gozcu.js";
 
 const TRAIL_POINTS = 600; // about two minutes of flight at 5 Hz
 const TRAIL_STEP_M = 1; // the vehicle must move this far for a new track point
 const FIRST_FIX_ZOOM = 16;
 const MAX_ZOOM = 19; // until the server's settings arrive
 const ZOOM_HANDLERS = ["scrollWheelZoom", "doubleClickZoom", "touchZoom"];
+const RAY_PX = 140; // length of a track's ray on the screen...
+const RAY_SHARE = 0.35; // ...but no more than this share of a small map, so its end shows
+const MAX_RAYS = 3; // the contract reports at most three tracks
 
 // Our own vehicle symbol, nose to the north. The arrow is turned to the heading;
 // the label under it says why the position shown may not be current.
@@ -56,6 +63,10 @@ export class MapPanel {
   #zooming = false;
   #followButton;
   #notice;
+  #rays;
+  #rayLabel;
+  #marks = null; // Gözcü's fresh tracks: {tracks, target, level}
+  #drawnRays = ""; // what the rays show now, so an unchanged picture is not redrawn
 
   constructor(container, followButton, notice) {
     this.#followButton = followButton;
@@ -94,6 +105,15 @@ export class MapPanel {
       interactive: false,
       keyboard: false,
     });
+    this.#rays = Array.from(
+      { length: MAX_RAYS },
+      () => new L.Polyline([], { className: "map-ray", weight: 2, interactive: false }),
+    );
+    this.#rayLabel = new L.Marker([0, 0], {
+      icon: new L.DivIcon({ className: "map-ray-label", html: "", iconSize: null }),
+      interactive: false,
+      keyboard: false,
+    });
 
     this.#map.on({
       dragstart: () => this.#setFollow(false), // the operator looks elsewhere
@@ -102,7 +122,9 @@ export class MapPanel {
       },
       zoomend: () => {
         this.#zooming = false;
+        this.#drawRays(); // a ray keeps its length on the screen
       },
+      resize: () => this.#drawRays(), // swapped, enlarged: rays to suit the new size
     });
     followButton.addEventListener("click", () => this.#setFollow(!this.#follow));
     this.#setFollow(true);
@@ -147,10 +169,59 @@ export class MapPanel {
 
   /** The ground station is unreachable: the position shown may be old. */
   showOffline() {
+    this.#marks = null;
+    this.#drawRays();
     const element = this.#vehicle.getElement();
     if (!element) return;
     element.classList.add("is-stale");
     element.lastElementChild.textContent = "GCS offline";
+  }
+
+  /** Gözcü's part of a snapshot: a ray for each of its fresh tracks. */
+  showTracks(gozcu) {
+    this.#marks = trackMarks(gozcu);
+    this.#drawRays();
+  }
+
+  #drawRays() {
+    const marks = this.#marks;
+    const position = this.#position;
+    const usable = marks !== null && position !== null && this.#direction !== null;
+    const tracks = usable ? marks.tracks.slice(0, MAX_RAYS) : [];
+    // Snapshots come ten times a second; redraw only what changed.
+    const zoom = this.#map.getZoom();
+    const size = this.#map.getSize();
+    const pixels = Math.min(RAY_PX, RAY_SHARE * Math.min(size.x, size.y));
+    const drawn = JSON.stringify([tracks, marks?.target, marks?.level, position, this.#direction, zoom, pixels]);
+    if (drawn === this.#drawnRays) return;
+    this.#drawnRays = drawn;
+
+    let label = null;
+    this.#rays.forEach((ray, i) => {
+      const track = tracks[i];
+      if (track === undefined || track.az === null) {
+        ray.remove();
+        return;
+      }
+      const length = pixels * metresPerPixel(position[0], zoom);
+      const end = destination(...position, this.#direction + track.az, length);
+      ray.setLatLngs([position, end]);
+      if (!this.#map.hasLayer(ray)) ray.addTo(this.#map);
+      const isTarget = marks.target !== null && track.id === marks.target;
+      const path = ray.getElement();
+      path.classList.toggle("is-target", isTarget);
+      path.dataset.level = isTarget ? marks.level : "";
+      if (isTarget) label = { end, text: trackLabel(track, true), level: marks.level };
+    });
+    if (label === null) {
+      this.#rayLabel.remove();
+      return;
+    }
+    this.#rayLabel.setLatLng(label.end);
+    if (!this.#map.hasLayer(this.#rayLabel)) this.#rayLabel.addTo(this.#map);
+    const element = this.#rayLabel.getElement();
+    element.textContent = label.text; // words with the colour, never colour alone
+    element.dataset.level = label.level;
   }
 
   #moveVehicle(lat, lon) {
@@ -175,6 +246,7 @@ export class MapPanel {
     if (direction == null || direction === this.#direction) return;
     this.#direction = direction;
     element.firstElementChild.style.transform = `rotate(${direction}deg)`;
+    this.#drawRays(); // the rays turn with the vehicle, as the camera does
   }
 
   #showHome(lat, lon) {

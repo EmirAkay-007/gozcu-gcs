@@ -74,12 +74,15 @@ class VideoConfig:
     port: int = 5600
     max_fps: float = 0.0  # frames a second sent to the browser; 0: every frame
     ffmpeg: str = "ffmpeg"  # the program that decodes the video
+    hfov_deg: float = 64.7  # the camera's horizontal field of view (Gazebo's nose camera)
 
     def __post_init__(self) -> None:
         if not 1 <= self.port <= 65535:
             raise ConfigError("[video] port must be 1..65535")
         if not 0 <= self.max_fps <= 60:
             raise ConfigError("[video] max_fps must be 0..60")
+        if not 10 <= self.hfov_deg <= 170:
+            raise ConfigError("[video] hfov_deg must be 10..170")
 
 
 @dataclass(frozen=True)

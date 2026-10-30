@@ -4,10 +4,39 @@
 //
 // Decoding a frame takes a moment; frames that arrive meanwhile replace each
 // other, so a slow browser shows the newest picture rather than falling behind.
+// Gözcü's tracks are marked on the picture as it is drawn ("Overlay" turns that
+// off in this browser): nothing is drawn more often than frames arrive.
 
 import { formatAge } from "./fields.js";
+import { trackLabel, trackMarks } from "./gozcu.js";
 
 const FROZEN_AFTER_S = 2; // live, but no new frame here for this long: say so
+const OVERLAY_KEY = "gozcu.overlay";
+const LEVEL_COLOURS = { warn: "--caution", crit: "--alarm" };
+
+/**
+ * Where a track seen at azimuth and elevation (degrees, from the camera's optical
+ * axis, + right and up) lies in a picture of width × height from a camera with a
+ * horizontal field of view of hfovDeg; null when outside the picture or unknown.
+ * The inverse of the contract's AZ = atan((u − cx) / fx), EL = atan((cy − v) / fy),
+ * with square pixels (fy = fx).
+ */
+export function trackPoint(azDeg, elDeg, hfovDeg, width, height) {
+  if (azDeg === null || elDeg === null) return null;
+  const rad = Math.PI / 180;
+  const focal = width / 2 / Math.tan((hfovDeg / 2) * rad); // in pixels
+  const x = width / 2 + focal * Math.tan(azDeg * rad);
+  const y = height / 2 - focal * Math.tan(elDeg * rad);
+  return x < 0 || x > width || y < 0 || y > height ? null : { x, y };
+}
+
+function loadOverlay() {
+  try {
+    return localStorage.getItem(OVERLAY_KEY) !== "off";
+  } catch {
+    return true; // storage blocked, e.g. in a private window
+  }
+}
 
 /** Seconds as a recording time, e.g. "0:07", "12:34", "1:02:03". */
 export function formatDuration(seconds) {
@@ -44,22 +73,49 @@ export class VideoPanel {
   #pending = null; // the newest frame not decoded yet
   #decoding = false;
   #frameTime = null; // performance.now() when the last frame arrived
+  #overlay;
+  #overlayOn = loadOverlay();
+  #hfov = 64.7; // until the station's hello says otherwise
+  #marks = null; // Gözcü's fresh tracks to mark: {tracks, target, level}
 
   /** onRecord(on) asks the station to start (true) or stop (false) recording. */
-  constructor({ canvas, info, record, onRecord }) {
+  constructor({ canvas, info, record, overlay, onRecord }) {
     this.#canvas = canvas;
     this.#info = info;
     this.#record = record;
+    this.#overlay = overlay;
     const style = getComputedStyle(document.documentElement);
+    const names = ["--black", "--text", "--text-dim", "--font-ui", "--font-num", "--accent"];
     this.#colors = Object.fromEntries(
-      ["--black", "--text", "--text-dim", "--font-ui"].map((name) => [name, style.getPropertyValue(name)]),
+      [...names, ...Object.values(LEVEL_COLOURS)].map((name) => [name, style.getPropertyValue(name)]),
     );
     record.addEventListener("click", () => onRecord(!this.#status?.recording));
+    overlay.setAttribute("aria-pressed", String(this.#overlayOn));
+    overlay.addEventListener("click", () => {
+      this.#overlayOn = !this.#overlayOn;
+      overlay.setAttribute("aria-pressed", String(this.#overlayOn));
+      try {
+        localStorage.setItem(OVERLAY_KEY, this.#overlayOn ? "on" : "off");
+      } catch {
+        // not remembered this time
+      }
+      this.#draw();
+    });
     // Redraw whenever the panel changes size (window, swap, enlarge), and every
     // second, so the age of a frozen picture keeps counting.
     new ResizeObserver(() => this.#draw()).observe(canvas.parentElement);
     setInterval(() => this.#draw(), 1000);
     this.#showRecording();
+  }
+
+  /** The station's camera settings, from its hello message. */
+  configure({ hfov_deg: hfovDeg }) {
+    this.#hfov = hfovDeg;
+  }
+
+  /** Gözcü's part of a snapshot: its fresh tracks are marked on the next frame drawn. */
+  setGozcu(gozcu) {
+    this.#marks = trackMarks(gozcu);
   }
 
   /** A "video" status message from the station. */
@@ -140,15 +196,21 @@ export class VideoPanel {
     context.fillStyle = this.#colors["--black"];
     context.fillRect(0, 0, width, height);
     const bitmap = this.#bitmap;
+    let picture = null; // where the picture lies on the canvas
     if (bitmap) {
       const scale = Math.min(width / bitmap.width, height / bitmap.height); // whole picture
       const [w, h] = [bitmap.width * scale, bitmap.height * scale];
-      context.drawImage(bitmap, (width - w) / 2, (height - h) / 2, w, h);
+      picture = { x: (width - w) / 2, y: (height - h) / 2, w, h };
+      context.drawImage(bitmap, picture.x, picture.y, w, h);
     }
 
     const age = this.#frameTime === null ? null : (performance.now() - this.#frameTime) / 1000;
     const problem = pictureProblem(this.#status, age, this.#offline);
-    if (!problem) return;
+    if (!problem) {
+      // Marks only on a live picture: on an old one they would point at the wrong place.
+      if (picture && this.#overlayOn && this.#marks) this.#drawMarks(context, picture);
+      return;
+    }
     if (bitmap) {
       context.fillStyle = "rgb(0 0 0 / 0.6)"; // the old picture stays, dimmed
       context.fillRect(0, 0, width, height);
@@ -162,5 +224,35 @@ export class VideoPanel {
     context.fillStyle = this.#colors["--text-dim"];
     context.font = `13px ${font}`;
     context.fillText(problem.detail, width / 2, height / 2 + 12, width - 24);
+  }
+
+  /** A reticle and a label for each track, the target in its threat colour. */
+  #drawMarks(context, picture) {
+    const { tracks, target, level } = this.#marks;
+    context.lineWidth = 2;
+    context.font = `11px ${this.#colors["--font-num"]}`;
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    for (const track of tracks) {
+      const point = trackPoint(track.az, track.el, this.#hfov, picture.w, picture.h);
+      if (!point) continue;
+      const [x, y] = [picture.x + point.x, picture.y + point.y];
+      const isTarget = target !== null && track.id === target;
+      const colour = this.#colors[(isTarget && LEVEL_COLOURS[level]) || "--accent"];
+      context.strokeStyle = colour;
+      context.beginPath();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        context.moveTo(x + dx * 4, y + dy * 4); // a gap in the middle leaves the object visible
+        context.lineTo(x + dx * 12, y + dy * 12);
+      }
+      context.stroke();
+      context.strokeRect(x - 10, y - 10, 20, 20);
+      const label = trackLabel(track, isTarget);
+      const labelWidth = context.measureText(label).width + 6;
+      context.fillStyle = "rgb(0 0 0 / 0.7)"; // readable on sky and ground alike
+      context.fillRect(x - labelWidth / 2, y + 14, labelWidth, 14);
+      context.fillStyle = colour;
+      context.fillText(label, x, y + 15);
+    }
   }
 }

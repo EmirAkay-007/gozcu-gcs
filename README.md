@@ -46,6 +46,12 @@ proposed manoeuvre and what became of it, up to three tracks, and Gözcü's heal
 of state, mode, switch and faults also go to the event log, and Gözcü's values and tracks
 into the session recording.
 
+The tracks are marked on the video too, with a reticle and a label, the target in its
+threat colour ("Overlay" hides them in this browser); their place in the picture comes from
+the camera's horizontal field of view, `[video] hfov_deg`. On the map each track is a ray
+from the vehicle along its bearing, since Gözcü knows the direction of a track but not
+its range.
+
 The operator can change Gözcü's mode, approve or reject a proposal in CONFIRM mode, and
 run or pause perception. Each of these buttons has to be held down for 0.6 s, so a stray
 click sends nothing; a decision names the proposal it answers, so a late one is refused

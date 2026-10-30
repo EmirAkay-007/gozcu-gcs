@@ -205,6 +205,7 @@ def test_without_ffmpeg_there_is_no_picture_but_recording_works(stream, tmp_path
     watcher = Watcher()
     source = start_source(watcher, tmp_path, port=port, ffmpeg="no-such-ffmpeg")
     try:
+        wait_until(watcher.statuses)  # its socket is open: nothing sent from now on is lost
         source.set_recording(True)
         send(port, stream, 1.5)
         time.sleep(0.5)  # the last datagrams reach the file

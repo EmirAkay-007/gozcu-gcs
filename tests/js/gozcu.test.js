@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { commandLine, controls, proposalLine, threatBadge, trackCells } from "../../web/js/gozcu.js";
+import {
+  commandLine,
+  controls,
+  proposalLine,
+  threatBadge,
+  trackCells,
+  trackLabel,
+  trackMarks,
+} from "../../web/js/gozcu.js";
 
 const value = (value, text = String(value), more = {}) => ({
   value,
@@ -122,4 +130,25 @@ test("the outcome of a command stays in view for a while", () => {
   assert.equal(commandLine(command("NO ANSWER")).text, "mode AUTO: no answer from Gözcü");
   assert.equal(commandLine(command("ACCEPTED", null, 11)).text, "");
   assert.deepEqual(commandLine(null), { text: "", level: "" });
+});
+
+test("a mark says which track it is, and which one the threat is about", () => {
+  const track = { id: 3, class: "drone", tau: 9.14 };
+  assert.equal(trackLabel(track, true), "TGT 3 drone τ 9.1");
+  assert.equal(trackLabel({ id: 5, class: "bird", tau: null }, false), "5 bird");
+});
+
+test("only fresh tracks of a Gözcü that is heard are marked", () => {
+  const items = [{ id: 3, class: "drone", az: 4, el: 1, tau: 9 }];
+  const gozcu = (more = {}, tracks = {}) => ({
+    present: true,
+    fields: { state: value(2, "AVOID"), target: value(3) },
+    tracks: { items, age: 0.1, stale: false, ...tracks },
+    heard: true,
+    ...more,
+  });
+  assert.deepEqual(trackMarks(gozcu()), { tracks: items, target: 3, level: "crit" });
+  assert.equal(trackMarks(gozcu({ present: false })), null);
+  assert.equal(trackMarks(gozcu({}, { stale: true })), null);
+  assert.equal(trackMarks(gozcu({}, { items: [] })), null);
 });

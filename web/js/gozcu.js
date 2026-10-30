@@ -59,6 +59,24 @@ export function trackCells(track) {
   ];
 }
 
+/** The words next to a track's mark on the picture or the map, e.g. "TGT 3 drone τ 9.1". */
+export function trackLabel(track, isTarget) {
+  const tau = track.tau === null ? "" : ` τ ${track.tau.toFixed(1)}`;
+  return `${isTarget ? "TGT " : ""}${track.id ?? "?"} ${track.class ?? ""}${tau}`.trim();
+}
+
+/** The tracks to mark, from the snapshot's gozcu part: {tracks, target, level}, or null
+ * when there are none fresh enough to show. */
+export function trackMarks(gozcu) {
+  if (!gozcu.present || gozcu.tracks.stale || gozcu.tracks.items.length === 0) return null;
+  const target = gozcu.fields.target;
+  return {
+    tracks: gozcu.tracks.items,
+    target: target.stale ? null : target.value,
+    level: threatBadge(gozcu).level,
+  };
+}
+
 /** Which commands the operator can give now. */
 export function controls(gozcu) {
   const command = gozcu.command;

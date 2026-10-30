@@ -523,6 +523,42 @@ input:focus-visible {
   display: none;
 }
 
+.map-ray {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+}
+
+.map-ray.is-target {
+  stroke-width: 3px;
+  stroke-dasharray: none;
+}
+
+.map-ray.is-target[data-level="warn"] {
+  stroke: var(--caution);
+}
+
+.map-ray.is-target[data-level="crit"] {
+  stroke: var(--alarm);
+}
+
+.map-ray-label {
+  margin: -8px 0 0 6px; /* beside the ray's end; Leaflet's transform places the marker */
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--black);
+  color: var(--accent);
+  font: 11px var(--font-num);
+  white-space: nowrap;
+}
+
+.map-ray-label[data-level="warn"] {
+  color: var(--caution);
+}
+
+.map-ray-label[data-level="crit"] {
+  color: var(--alarm);
+}
+
 .map-home {
   border: 2px solid var(--text);
   border-radius: 3px;

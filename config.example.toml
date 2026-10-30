@@ -57,3 +57,6 @@ max_fps = 0.0
 # The program that turns the video into pictures for the browser
 # (sudo apt install ffmpeg). Without it there is no picture, but recording works.
 ffmpeg = "ffmpeg"
+# The camera's horizontal field of view, in degrees, for marking Gözcü's tracks on the
+# picture. 64.7 is Gazebo's nose camera (horizontal_fov 1.13 rad); use the real camera's.
+hfov_deg = 64.7

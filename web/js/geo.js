@@ -12,6 +12,28 @@ export function metresBetween(lat1, lon1, lat2, lon2) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
 }
 
+/** The point distanceM from (lat, lon) along bearingDeg (0 north, 90 east), on a sphere. */
+export function destination(lat, lon, bearingDeg, distanceM) {
+  const angle = distanceM / EARTH_RADIUS_M;
+  const bearing = bearingDeg * RAD;
+  const lat1 = lat * RAD;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angle) + Math.cos(lat1) * Math.sin(angle) * Math.cos(bearing),
+  );
+  const lon2 =
+    lon * RAD +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angle) * Math.cos(lat1),
+      Math.cos(angle) - Math.sin(lat1) * Math.sin(lat2),
+    );
+  return [lat2 / RAD, lon2 / RAD];
+}
+
+/** Metres on the ground that one screen pixel covers at a Web Mercator zoom level. */
+export function metresPerPixel(lat, zoom) {
+  return (40075016.686 * Math.cos(lat * RAD)) / (256 * 2 ** zoom); // equator length / map width
+}
+
 /**
  * The vehicle's recent track: a new point only once it has moved minStepM,
  * so a vehicle standing still does not fill it, and at most maxPoints of them.
