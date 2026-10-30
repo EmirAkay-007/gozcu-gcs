@@ -51,6 +51,14 @@ class TelemetryState:
         sample = self._samples.get(key)
         return None if sample is None else sample.value
 
+    def fresh(self, key: str, now: float) -> Sample | None:
+        """The newest sample of a field, or None when there is none or it is stale."""
+        sample = self._samples.get(key)
+        if sample is None:
+            return None
+        limit = self._fields[key].stale_limit()
+        return None if limit is not None and now - sample.received > limit else sample
+
     def snapshot(self, now: float) -> dict[str, dict[str, Any]]:
         """Every field as plain, JSON-ready data: value, text, age, stale flag, alert level."""
         out = {}

@@ -88,6 +88,23 @@
     </div>
     <div class="panel-body">
       <div class="attitude"><canvas id="attitude-canvas" aria-label="Attitude indicator"></canvas></div>
+      <!-- Commands to the autopilot (js/vehicle.js), held down like Gözcü's -->
+      <section class="control" aria-labelledby="control-title">
+        <h3 id="control-title">Vehicle</h3>
+        <div class="control-row">
+          <select id="control-mode" aria-label="Flight mode to set"><option value="">Mode…</option></select>
+          <button type="button" class="hold" id="control-set" disabled
+                  title="Press and hold to set this flight mode">Set mode</button>
+        </div>
+        <div class="control-row">
+          <button type="button" class="hold" id="control-arm" disabled
+                  title="Press and hold; the autopilot runs its pre-arm checks first">ARM</button>
+          <button type="button" class="hold" id="control-disarm" disabled
+                  title="Press and hold; ArduPlane refuses it while flying">DISARM</button>
+        </div>
+        <div class="command-line" id="control-line" role="status"></div>
+        <div class="hint">Right-click the map to fly there</div>
+      </section>
       <ol class="widgets pinned" id="pinned">
         <li class="w-waiting">Waiting for the ground station…</li>
       </ol>
@@ -125,6 +142,20 @@
       <div class="view-body">
         <div class="map" id="map"></div>
         <div class="map-notice" id="map-notice" role="status" hidden></div>
+        <!-- Opened by a right-click on the map (js/flyto.js) -->
+        <div class="fly-here" id="fly-here" role="dialog" aria-labelledby="fly-here-title" hidden>
+          <div class="fly-here-head">
+            <h3 id="fly-here-title">Fly here</h3>
+            <button type="button" class="small" id="fly-here-close" title="Close (Esc)" aria-label="Close">×</button>
+          </div>
+          <div class="fly-here-place num" id="fly-here-place"></div>
+          <label class="fly-here-alt">Altitude
+            <input type="number" class="num" id="fly-here-alt" min="20" max="500" step="1">
+            m above home</label>
+          <button type="button" class="hold" id="fly-here-go" disabled
+                  title="Press and hold: the vehicle switches to GUIDED and flies there">Fly here in GUIDED</button>
+          <div class="command-line" id="fly-here-line" role="status"></div>
+        </div>
       </div>
     </article>
   </section>

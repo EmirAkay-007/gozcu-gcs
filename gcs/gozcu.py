@@ -25,12 +25,14 @@ TRACKS_STALE_S = 1.0
 MAX_TRACKS = 3
 
 STATES = {0: "CLEAR", 1: "ADVISORY", 2: "AVOID", 3: "CLEAR OF CONFLICT"}
+AVOID = 2
 MODES = {0: "WARN", 1: "CONFIRM", 2: "AUTO"}
 SWITCH = {0: "INHIBIT", 1: "ARM"}
 PERCEPTION = {0: "PAUSED", 1: "RUNNING"}
 FAULTS = {1: "MPU silent", 2: "perception stale"}  # bit -> meaning
 MANOEUVRES = {0: "none", 1: "CLIMB", 2: "DESCEND", 3: "TURN LEFT", 4: "TURN RIGHT"}
 DECISIONS = {0: "WAITING", 1: "APPROVED", 2: "REFUSED", 3: "REJECTED", 4: "EXPIRED"}
+WAITING = 0
 REASONS = {
     0: "",
     1: "outside the flight envelope",
@@ -202,6 +204,24 @@ class GozcuState:
     def present(self, now: float) -> bool:
         """Whether Gözcü's heartbeat is recent: only then may commands be sent."""
         return self._heartbeat_at is not None and now - self._heartbeat_at <= SILENT_AFTER_S
+
+    def holding(self, now: float) -> str | None:
+        """Why the operator must leave the autopilot alone now, or None: while Gözcü
+        avoids, or while one of its proposals waits for the operator's answer.
+        A silent Gözcü holds nothing: its state is unknown."""
+        if not self.present(now):
+            return None
+        state = self._values.fresh("state", now)
+        if state is not None and state.value == AVOID:
+            return "Gözcü is avoiding"
+        proposal = self._values.fresh("proposal", now)
+        decision = self._values.fresh("decision", now)
+        if not (proposal and proposal.value and decision and decision.value == WAITING):
+            return None
+        left = self._values.fresh("time_left", now)
+        if left is not None and left.value is not None and left.value / 1000 <= now - left.received:
+            return None  # its time is up
+        return f"Gözcü's proposal {proposal.value} waits for an answer"
 
     def snapshot(self, now: float) -> dict[str, Any]:
         heartbeat_age = None if self._heartbeat_at is None else now - self._heartbeat_at

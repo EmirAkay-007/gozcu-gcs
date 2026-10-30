@@ -157,7 +157,7 @@ def test_the_stations_commands_and_the_fake_agree(station):
     events = []
 
     def send(sent):  # the link between them, both ways
-        msg = command(ACTIONS[sent.action], sent.value, sent.proposal)
+        msg = command(ACTIONS[sent.action], sent.args["value"], sent.args["proposal"])
         result, reason = fake.on_command(msg, 11.0)
         commands.on_ack(SimpleNamespace(result=result, result_param2=reason), True, 11.1)
 

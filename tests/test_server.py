@@ -39,6 +39,9 @@ class FakeSource:
     def gozcu_command(self, action, value, proposal=0):
         self.commands.append((action, value, proposal))
 
+    def vehicle_command(self, action, args):
+        self.commands.append(("vehicle", action, args))
+
     def set_connection(self, connection):
         self.commands.append(("connection", connection))
 
@@ -94,6 +97,9 @@ def test_a_browser_gets_the_field_list_then_live_data():
         assert hello["map"]["tile_url"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         assert "OpenStreetMap" in hello["map"]["attribution"]
         assert hello["video"] == {"hfov_deg": 64.7}
+        assert hello["control"]["modes"][:3] == ["FBWA", "CRUISE", "LOITER"]
+        assert "MANUAL" not in hello["control"]["modes"]
+        assert hello["control"]["fly_alt_m"] == [20, 500]
         sources[0].publish(EVENT)
         assert ws.receive_json() == EVENT
         sources[0].publish(SNAPSHOT)
@@ -210,6 +216,19 @@ def test_a_gozcu_command_from_a_browser_reaches_the_source():
         ws.send_json({"type": "gozcu_command", "action": "mode", "value": 2})
         wait_until(lambda: len(sources[0].commands) == 2)
     assert sources[0].commands == [("decide", 1, 7), ("mode", 2, 0)]  # checked by the source
+
+
+def test_a_vehicle_command_from_a_browser_reaches_the_source():
+    app, sources, _ = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        fly_to = {"lat": 1.5, "lon": 2, "alt": 90}
+        ws.send_json({"type": "vehicle_command", "action": "mode", "mode": "RTL"})
+        ws.send_json({"type": "vehicle_command", "action": "fly_to", **fly_to})
+        wait_until(lambda: len(sources[0].commands) == 2)
+    assert sources[0].commands == [  # checked by the source
+        ("vehicle", "mode", {"mode": "RTL"}),
+        ("vehicle", "fly_to", fly_to),
+    ]
 
 
 def test_a_browser_can_change_or_close_the_link():

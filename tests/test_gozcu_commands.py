@@ -17,7 +17,8 @@ class Link:
         self.commands = GozcuCommands(self._send, lambda *event: self.events.append(event))
 
     def _send(self, command):
-        self.sent.append((command.action, command.value, command.proposal, command.sends - 1))
+        args = command.args
+        self.sent.append((command.action, args["value"], args["proposal"], command.sends - 1))
 
     def state(self, now=0.0):
         latest = self.commands.snapshot(now)

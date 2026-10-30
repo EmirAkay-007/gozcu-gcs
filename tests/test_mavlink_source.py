@@ -49,14 +49,20 @@ def send_text(mav, severity, text):
 class FakeAutopilot:
     """Just enough of ArduPilot to drive MavlinkSource.
 
-    Sends a HEARTBEAT (FBWA, disarmed) every second and ATTITUDE about ten times
-    a second, and accepts every SET_MESSAGE_INTERVAL.
+    Sends a HEARTBEAT (FBWA, disarmed at first) every second, ATTITUDE about ten
+    times a second and, given a position (lat, lon, metres above home), its
+    GLOBAL_POSITION_INT as often. Accepts every SET_MESSAGE_INTERVAL, and mode,
+    arm and reposition commands as ArduPlane would when all is well.
     """
 
-    def __init__(self):
+    def __init__(self, position=None):
         self._server = socket.create_server(("127.0.0.1", 0))
         self._server.settimeout(0.1)
         self.url = f"tcp:127.0.0.1:{self._server.getsockname()[1]}"
+        self.position = position
+        self.mode = 5  # FBWA
+        self.armed = False
+        self.vehicle_commands = []  # mode, arm and reposition commands received
         self.requested = []  # message ids asked for, in order
         self.connections = 0
         self._hang_up = threading.Event()
@@ -124,16 +130,22 @@ class FakeAutopilot:
             now = time.monotonic()
             try:
                 if not self._quiet.is_set() and now >= next_heartbeat:
+                    armed = mavlink.MAV_MODE_FLAG_SAFETY_ARMED if self.armed else 0
                     mav.heartbeat_send(
                         mavlink.MAV_TYPE_FIXED_WING,
                         mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
-                        mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                        5,  # FBWA
+                        mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | armed,
+                        self.mode,
                         mavlink.MAV_STATE_STANDBY,
                     )
                     next_heartbeat = now + 1.0
                 boot_ms += 100
                 mav.attitude_send(boot_ms, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0)
+                if self.position is not None:
+                    lat, lon, alt = self.position
+                    mav.global_position_int_send(
+                        boot_ms, round(lat * 1e7), round(lon * 1e7), 0, round(alt * 1e3), 0, 0, 0, 0
+                    )
                 while not self._texts.empty():
                     send_text(mav, *self._texts.get())
                 while not self._gozcu_sends.empty():
@@ -149,10 +161,24 @@ class FakeAutopilot:
                 return
 
     def _answer(self, mav, gozcu, msg):
-        if msg.get_type() != "COMMAND_LONG":
+        kind = msg.get_type()
+        if kind == "COMMAND_INT" and msg.command == mavlink.MAV_CMD_DO_REPOSITION:
+            self.vehicle_commands.append(msg)
+            if int(msg.param2) & mavlink.MAV_DO_REPOSITION_FLAGS_CHANGE_MODE:
+                self.mode = 15  # GUIDED
+            result, reason, answerer = mavlink.MAV_RESULT_ACCEPTED, 0, mav
+        elif kind != "COMMAND_LONG":
             return
-        if msg.command == mavlink.MAV_CMD_SET_MESSAGE_INTERVAL:
+        elif msg.command == mavlink.MAV_CMD_SET_MESSAGE_INTERVAL:
             self.requested.append(int(msg.param1))
+            result, reason, answerer = mavlink.MAV_RESULT_ACCEPTED, 0, mav
+        elif msg.command == mavlink.MAV_CMD_DO_SET_MODE:
+            self.vehicle_commands.append(msg)
+            self.mode = int(msg.param2)
+            result, reason, answerer = mavlink.MAV_RESULT_ACCEPTED, 0, mav
+        elif msg.command == mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
+            self.vehicle_commands.append(msg)
+            self.armed = msg.param1 == 1
             result, reason, answerer = mavlink.MAV_RESULT_ACCEPTED, 0, mav
         elif msg.command == mavlink.MAV_CMD_USER_1:
             self.gozcu_commands.append(msg)
@@ -317,6 +343,69 @@ def test_a_gozcu_command_is_not_sent_before_gozcu_is_heard(autopilot):
         source.stop()
     assert autopilot.gozcu_commands == []
     assert "not sent: approve proposal 4 (Gözcü is silent)" in events(published)
+
+
+def control(published):
+    return snapshots(published)[-1]["control"]
+
+
+def vehicle_command_state(published):
+    command = control(published)["command"]
+    return None if command is None else (command["action"], command["state"])
+
+
+def test_vehicle_commands_go_to_the_autopilot_as_arduplane_takes_them(autopilot):
+    published = []
+    source = MavlinkSource(MavlinkConfig(connection=autopilot.url), published.append)
+    source.start()
+    try:
+        wait_for(lambda: link_state(published) == CONNECTED)
+        assert control(published)["blocked"] is None
+        source.vehicle_command("arm", {"arm": True})
+        wait_for(lambda: vehicle_command_state(published) == ("arm", "ACCEPTED"))
+        source.vehicle_command("mode", {"mode": "TAKEOFF"})
+        wait_for(lambda: vehicle_command_state(published) == ("mode", "ACCEPTED"))
+        source.vehicle_command("fly_to", {"lat": -35.3632621, "lon": 149.1652374, "alt": 120})
+        wait_for(lambda: vehicle_command_state(published) == ("fly_to", "ACCEPTED"))
+        wait_for(lambda: snapshots(published)[-1]["fields"]["mode"]["value"] == "GUIDED")
+        assert snapshots(published)[-1]["fields"]["armed"]["value"] is True
+    finally:
+        source.stop()
+
+    arm, mode, fly = autopilot.vehicle_commands
+    for sent in (arm, mode, fly):
+        assert (sent.target_system, sent.target_component) == (1, 1)
+    assert (arm.command, arm.param1, arm.param2) == (mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 1, 0)
+    custom = mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
+    assert (mode.command, mode.param1, mode.param2) == (mavlink.MAV_CMD_DO_SET_MODE, custom, 13)
+    assert fly.get_type() == "COMMAND_INT"
+    assert (fly.command, fly.frame) == (
+        mavlink.MAV_CMD_DO_REPOSITION,
+        mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+    )
+    assert fly.param2 == mavlink.MAV_DO_REPOSITION_FLAGS_CHANGE_MODE
+    assert (fly.x, fly.y, fly.z) == (-353632621, 1491652374, 120)
+    assert "the autopilot accepted: mode TAKEOFF" in events(published)
+
+
+def test_vehicle_commands_are_held_while_gozcu_avoids(autopilot):
+    def avoid(mav):
+        gozcu_heartbeat(mav)
+        mav.named_value_int_send(5000, b"G_STATE", 2)
+
+    published = []
+    source = MavlinkSource(MavlinkConfig(connection=autopilot.url), published.append)
+    source.start()
+    try:
+        wait_for(lambda: link_state(published) == CONNECTED)
+        autopilot.as_gozcu(avoid)
+        wait_for(lambda: control(published)["blocked"] == "Gözcü is avoiding")
+        source.vehicle_command("mode", {"mode": "RTL"})
+        wait_for(lambda: vehicle_command_state(published) == ("mode", "NOT SENT"))
+    finally:
+        source.stop()
+    assert autopilot.vehicle_commands == []
+    assert "not sent: mode RTL (Gözcü is avoiding)" in events(published)
 
 
 def test_the_operator_can_change_and_close_the_link(autopilot):

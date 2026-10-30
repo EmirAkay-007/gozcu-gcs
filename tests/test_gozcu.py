@@ -154,6 +154,33 @@ def test_changes_that_matter_reach_the_log(heard):
     ]
 
 
+def test_the_autopilot_is_held_while_gozcu_avoids(heard):
+    gozcu, _, state = heard
+    gozcu.ints(G_STATE=1)
+    assert state.holding(0.0) is None  # an advisory holds nothing
+    gozcu.ints(G_STATE=2)
+    assert state.holding(0.0) == "Gözcü is avoiding"
+    assert state.holding(1.6) is None  # an old state proves nothing
+    gozcu.now = 3.5
+    gozcu.ints(G_STATE=2)
+    assert state.holding(3.5) is None  # nor does a Gözcü that has fallen silent
+
+
+def test_the_autopilot_is_held_while_a_proposal_waits_for_the_operator(heard):
+    gozcu, _, state = heard
+    gozcu.ints(G_STATE=1, G_PROP=7, G_DEC=0, G_TTL_MS=4000)
+    assert state.holding(0.5) == "Gözcü's proposal 7 waits for an answer"
+    assert state.holding(1.0) == "Gözcü's proposal 7 waits for an answer"
+    gozcu.now = 1.0
+    gozcu.ints(G_PROP=7, G_DEC=0, G_TTL_MS=500)
+    assert state.holding(1.4) is not None
+    assert state.holding(1.6) is None  # its time is up
+    gozcu.ints(G_TTL_MS=3000, G_DEC=1)
+    assert state.holding(1.0) is None  # approved
+    gozcu.ints(G_PROP=0, G_DEC=0)
+    assert state.holding(1.0) is None  # no proposal
+
+
 def test_texts_from_gozcu_reach_the_log(heard):
     gozcu, events, _ = heard
     text = "Proposal 7: climb, approve within 5 s"

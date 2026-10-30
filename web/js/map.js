@@ -8,6 +8,9 @@
 //
 // Gözcü's tracks have a bearing but no range, so each is drawn as a ray from the
 // vehicle along that bearing, of the same length on the screen at every zoom.
+//
+// A right-click picks a point to fly to (flyto.js), which is marked until the
+// vehicle no longer goes there.
 
 import * as L from "../vendor/leaflet/leaflet-src.esm.js";
 import { formatAge } from "./fields.js";
@@ -28,6 +31,13 @@ const MAX_RAYS = 3; // the contract reports at most three tracks
 const VEHICLE_HTML =
   '<svg viewBox="-14 -14 28 28" width="28" height="28" aria-hidden="true">' +
   '<path d="M0 -12 L9 10 L0 5 L-9 10 Z"/></svg><span class="map-label"></span>';
+
+// A ring with a cross for a point to fly to, drawn twice: dark under light, as the track.
+const TARGET_SHAPE = '<circle r="6"/><path d="M0 -11V-3M0 3V11M-11 0H-3M3 0H11"/>';
+const TARGET_HTML =
+  '<svg viewBox="-12 -12 24 24" width="24" height="24" aria-hidden="true">' +
+  `<g class="casing">${TARGET_SHAPE}</g><g class="line">${TARGET_SHAPE}</g></svg>` +
+  '<span class="map-label"></span>';
 
 // Empty 256-pixel tiles with an outline (see .map-grid-tile in app.css).
 const GridLayer = L.GridLayer.extend({
@@ -67,6 +77,8 @@ export class MapPanel {
   #rayLabel;
   #marks = null; // Gözcü's fresh tracks: {tracks, target, level}
   #drawnRays = ""; // what the rays show now, so an unchanged picture is not redrawn
+  #target; // the point to fly to
+  #drawnTarget = "null"; // what it shows now, as for the rays
 
   constructor(container, followButton, notice) {
     this.#followButton = followButton;
@@ -113,6 +125,12 @@ export class MapPanel {
       icon: new L.DivIcon({ className: "map-ray-label", html: "", iconSize: null }),
       interactive: false,
       keyboard: false,
+    });
+    this.#target = new L.Marker([0, 0], {
+      icon: new L.DivIcon({ className: "map-target", html: TARGET_HTML, iconSize: [24, 24] }),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 500, // under the vehicle, above home
     });
 
     this.#map.on({
@@ -181,6 +199,28 @@ export class MapPanel {
   showTracks(gozcu) {
     this.#marks = trackMarks(gozcu);
     this.#drawRays();
+  }
+
+  /** Call handler({lat, lon}) when the operator right-clicks a point of the map. */
+  onPick(handler) {
+    // With a listener, Leaflet keeps the browser's own menu closed.
+    this.#map.on("contextmenu", ({ latlng }) => handler({ lat: latlng.lat, lon: latlng.lng }));
+  }
+
+  /** Mark a point to fly to, {lat, lon, text, sent}, or none (null). */
+  showTarget(target) {
+    const drawn = JSON.stringify(target);
+    if (drawn === this.#drawnTarget) return; // snapshots come ten times a second
+    this.#drawnTarget = drawn;
+    if (target === null) {
+      this.#target.remove();
+      return;
+    }
+    this.#target.setLatLng([target.lat, target.lon]);
+    if (!this.#map.hasLayer(this.#target)) this.#target.addTo(this.#map);
+    const element = this.#target.getElement();
+    element.classList.toggle("is-sent", target.sent); // dashed until sent
+    element.lastElementChild.textContent = target.text;
   }
 
   #drawRays() {

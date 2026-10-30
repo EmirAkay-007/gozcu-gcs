@@ -6,7 +6,9 @@ again when it breaks. What it learns leaves the thread only as plain data,
 through publish() (see gcs.sources.base).
 
 Only the autopilot's messages count as the vehicle's; those of Gözcü, another
-component of the same system, go to GozcuState (gcs.gozcu).
+component of the same system, go to GozcuState (gcs.gozcu). The operator's
+commands go to Gözcü (gcs.gozcu_commands) or to the autopilot
+(gcs.vehicle_commands), each with a queue of its own.
 
 The link state keeps "transport open" apart from "telemetry fresh". In SITL
 lockstep the vehicle's clock follows Gazebo, so a slow or paused simulation
@@ -20,16 +22,18 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
+from gcs.commands import Command
 from gcs.config import MavlinkConfig
 from gcs.fields import MESSAGE_RATES_HZ
 from gcs.gozcu import GozcuState
-from gcs.gozcu_commands import ACTIONS, Command, GozcuCommands
-from gcs.heartbeat import is_armed, is_vehicle_heartbeat, mode_name
+from gcs.gozcu_commands import ACTIONS, GozcuCommands
+from gcs.heartbeat import is_armed, is_plane, is_vehicle_heartbeat, mode_name
 from gcs.intervals import IntervalRequest, IntervalRequester, send_interval_request
 from gcs.link_stats import PacketLossMeter, RateMeter
 from gcs.mav import enum_name, mavlink, open_link
 from gcs.state import TelemetryState
 from gcs.statustext import StatusTextAssembler
+from gcs.vehicle_commands import COMMANDS, MODES, VehicleCommands
 
 # Link states, as published in snapshot["link"]["state"]
 CONNECTING = "CONNECTING"  # no transport: opening it, or waiting to try again
@@ -80,6 +84,10 @@ class MavlinkSource:
         self._commands = GozcuCommands(
             self._send_gozcu_command, lambda severity, text: self._event("gozcu", severity, text)
         )
+        self._vehicle_commands = VehicleCommands(
+            self._send_vehicle_command,
+            lambda severity, text: self._event("vehicle", severity, text),
+        )
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="mavlink", daemon=True)
         self._connection: str | None = config.connection  # None: closed by the operator
@@ -102,6 +110,11 @@ class MavlinkSource:
     def gozcu_command(self, action: Any, value: Any, proposal: Any = 0) -> None:
         """Ask Gözcü for something (see gcs.gozcu_commands); safe to call from any thread."""
         self._commands.request(action, value, proposal)
+
+    def vehicle_command(self, action: Any, args: Any) -> None:
+        """Ask the autopilot for something (see gcs.vehicle_commands); safe to call from
+        any thread."""
+        self._vehicle_commands.request(action, args)
 
     def set_connection(self, connection: str | None) -> None:
         """Close the link and open this one instead, or none; safe from any thread.
@@ -192,6 +205,7 @@ class MavlinkSource:
 
     def _tick(self, now: float) -> None:
         self._commands.poll(now, self._gozcu_unreachable(now))
+        self._vehicle_commands.poll(now, self._autopilot_unreachable(), self._autopilot_held(now))
         if now >= self._next_snapshot:
             self._next_snapshot = next_due(self._next_snapshot, SNAPSHOT_PERIOD_S, now)
             self._publish(self._snapshot(now))
@@ -244,8 +258,60 @@ class MavlinkSource:
             mavlink.MAV_CMD_USER_1,
             command.sends - 1,  # confirmation: 0, then 1, 2 when sent again
             ACTIONS[command.action],
-            command.value,
-            command.proposal,
+            command.args["value"],
+            command.args["proposal"],
+            0,
+            0,
+            0,
+            0,
+        )
+
+    def _autopilot_unreachable(self) -> str | None:
+        """Why a command cannot go to the autopilot now, or None if it can."""
+        if self._conn is None or self._vehicle is None:
+            return "no link to the vehicle"
+        return None
+
+    def _autopilot_held(self, now: float) -> str | None:
+        """Why no command may go to the autopilot now, though it can be reached."""
+        if self._vehicle is None:
+            return None
+        if self._link_state == LINK_LOST:
+            return "no heartbeat from the autopilot"
+        if not is_plane(self._last_heartbeat):
+            return "not an ArduPlane vehicle"  # its mode numbers would mean other modes
+        return self._gozcu.holding(now)
+
+    def _send_vehicle_command(self, command: Command) -> None:
+        args = command.args
+        if command.action == "fly_to":
+            # COMMAND_INT, as MAVLink asks for commands with a position: the float
+            # parameters of COMMAND_LONG would round it to about half a metre.
+            self._conn.mav.command_int_send(
+                *self._vehicle,
+                mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,  # altitude above home
+                mavlink.MAV_CMD_DO_REPOSITION,
+                0,  # current: unused
+                0,  # autocontinue: unused
+                -1,  # ground speed: the vehicle's own
+                mavlink.MAV_DO_REPOSITION_FLAGS_CHANGE_MODE,  # switch to GUIDED
+                0,  # loiter radius: the vehicle's own
+                0,  # loiter direction, for planes: clockwise
+                round(args["lat"] * 1e7),
+                round(args["lon"] * 1e7),
+                args["alt"],
+            )
+            return
+        if command.action == "mode":
+            first = (mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, MODES[args["mode"]])
+        else:
+            first = (1 if args["arm"] else 0, 0)  # param2 0: never forced
+        self._conn.mav.command_long_send(
+            *self._vehicle,
+            COMMANDS[command.action],
+            command.sends - 1,  # confirmation: 0, then 1, 2 when sent again
+            *first,
+            0,
             0,
             0,
             0,
@@ -342,6 +408,8 @@ class MavlinkSource:
         elif msg.command == mavlink.MAV_CMD_SET_MESSAGE_INTERVAL and not from_gozcu:
             self._requests.on_ack(msg.result, now)
             self._report_rejected_requests()
+        elif msg.command in COMMANDS.values() and not from_gozcu:
+            self._vehicle_commands.on_ack(msg, now)
 
     def _report_rejected_requests(self) -> None:
         """Tell the operator once about every rate request the vehicle did not accept."""
@@ -442,4 +510,8 @@ class MavlinkSource:
             },
             "fields": self._state.snapshot(now),
             "gozcu": {**self._gozcu.snapshot(now), "command": self._commands.snapshot(now)},
+            "control": {
+                "blocked": self._autopilot_unreachable() or self._autopilot_held(now),
+                "command": self._vehicle_commands.snapshot(now),
+            },
         }

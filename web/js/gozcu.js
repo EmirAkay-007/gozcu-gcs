@@ -9,12 +9,13 @@ import { holdToConfirm } from "./hold.js";
 // Amber for an advisory, red for avoid, green only once clear of conflict.
 const THREAT_LEVELS = { CLEAR: "", ADVISORY: "warn", AVOID: "crit", "CLEAR OF CONFLICT": "ok" };
 const SHOW_RESULT_S = 10; // how long the outcome of a command stays in view
+// What became of a command that did not go through, for who it was meant for
 const OUTCOMES = {
-  DENIED: "refused",
-  BUSY: "Gözcü is busy",
-  "NO ANSWER": "no answer from Gözcü",
-  "NO ROUTE": "not delivered",
-  "NOT SENT": "not sent",
+  DENIED: () => "refused",
+  BUSY: (who) => `${who} is busy`,
+  "NO ANSWER": (who) => `no answer from ${who}`,
+  "NO ROUTE": () => "not delivered",
+  "NOT SENT": () => "not sent",
 };
 
 /** Seconds left for the operator, counting down between updates; null if unknown. */
@@ -100,13 +101,13 @@ export function controls(gozcu) {
   };
 }
 
-/** The newest command and its outcome, as {text, level}; "" once it is old news. */
-export function commandLine(command) {
+/** The newest command to who and its outcome, as {text, level}; "" once it is old news. */
+export function commandLine(command, who = "Gözcü") {
   if (!command) return { text: "", level: "" };
-  if (command.state === "PENDING") return { text: `${command.text}: waiting for Gözcü…`, level: "" };
+  if (command.state === "PENDING") return { text: `${command.text}: waiting for ${who}…`, level: "" };
   if (command.age > SHOW_RESULT_S) return { text: "", level: "" };
   if (command.state === "ACCEPTED") return { text: `${command.text}: accepted`, level: "" };
-  const outcome = OUTCOMES[command.state] ?? command.state.toLowerCase();
+  const outcome = OUTCOMES[command.state]?.(who) ?? command.state.toLowerCase();
   const detail = command.detail ? ` (${command.detail})` : "";
   return { text: `${command.text}: ${outcome}${detail}`, level: "warn" };
 }

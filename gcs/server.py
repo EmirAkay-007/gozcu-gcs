@@ -32,6 +32,7 @@ from gcs.mav import check_connection, serial_ports
 from gcs.recorder import Recorder, open_recorder, session_header
 from gcs.sources.base import TelemetrySource
 from gcs.sources.mavlink_source import MavlinkSource
+from gcs.vehicle_commands import FLY_ALT_M, MODES
 from gcs.video import VideoSource, video_status
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -176,7 +177,8 @@ class PageFiles(StaticFiles):
 
 def hello_message(config: Config) -> dict[str, Any]:
     """Sent first to every browser: the fields it can show, in registry order, the map,
-    and the camera's field of view (to mark Gözcü's tracks on the picture)."""
+    the camera's field of view (to mark Gözcü's tracks on the picture), and the
+    flight modes and "fly here" altitudes the autopilot's commands offer."""
     fields = [{"key": f.key, "label": f.label, "unit": f.unit, "pinned": f.pinned} for f in FIELDS]
     map_settings = {
         "tile_url": config.map.tile_url,
@@ -184,7 +186,14 @@ def hello_message(config: Config) -> dict[str, Any]:
         "max_zoom": config.map.max_zoom,
     }
     video = {"hfov_deg": config.video.hfov_deg}
-    return {"type": "hello", "fields": fields, "map": map_settings, "video": video}
+    control = {"modes": list(MODES), "fly_alt_m": list(FLY_ALT_M)}
+    return {
+        "type": "hello",
+        "fields": fields,
+        "map": map_settings,
+        "video": video,
+        "control": control,
+    }
 
 
 def make_publish(loop: asyncio.AbstractEventLoop, hub: Hub) -> Publish:
@@ -347,13 +356,15 @@ async def _request(app: FastAPI, text: str) -> None:
 
         {"type": "video_recording", "on": bool}
         {"type": "gozcu_command", "action": str, "value": int, "proposal": int}
+        {"type": "vehicle_command", "action": "mode", "mode": str}
+        {"type": "vehicle_command", "action": "arm", "arm": bool}
+        {"type": "vehicle_command", "action": "fly_to", "lat": deg, "lon": deg, "alt": m}
         {"type": "connect", "connection": str}
         {"type": "disconnect"}
         {"type": "list_ports"}
 
     The outcome reaches every browser through the events, the video status, the
-    snapshot and the "ports" message; the source checks a Gözcü command before
-    sending it.
+    snapshot and the "ports" message; the source checks a command before sending it.
     """
     try:
         request = json.loads(text)
@@ -364,6 +375,9 @@ async def _request(app: FastAPI, text: str) -> None:
     if kind == "gozcu_command":
         action, value = request.get("action"), request.get("value")
         app.state.source.gozcu_command(action, value, request.get("proposal", 0))
+    elif kind == "vehicle_command":
+        args = {key: value for key, value in request.items() if key not in ("type", "action")}
+        app.state.source.vehicle_command(request.get("action"), args)
     elif kind == "connect":
         try:
             connection = check_connection(str(request.get("connection", "")))

@@ -8,10 +8,13 @@ quickly without raising, and receives plain, JSON-ready dicts of two kinds:
     {"type": "snapshot", "seq": int, "time": float,
      "link": {"state": str, "connection": str, "vehicle": dict | None},
      "fields": {key: {"value", "text", "reason", "age", "stale", "level"}},
-     "gozcu": {"heard", "present", "system_status", "fields", "tracks", "command"}}
+     "gozcu": {"heard", "present", "system_status", "fields", "tracks", "command"},
+     "control": {"blocked": str | None, "command": dict | None}}
 
         about ten times a second: the whole state at once (see gcs.state, and
-        gcs.gozcu and gcs.gozcu_commands for Gözcü's part);
+        gcs.gozcu and gcs.gozcu_commands for Gözcü's part). "control" is about
+        commands to the autopilot (gcs.vehicle_commands): why none can be sent
+        now, if so, and the newest one;
 
     {"type": "event", "time": float, "source": str, "severity": str, "text": str}
 
@@ -39,4 +42,11 @@ class TelemetrySource(Protocol):
 
         Safe to call from any thread, and never raises: what becomes of the request
         is published, in the snapshot (gozcu.command) and as events.
+        """
+
+    def vehicle_command(self, action: Any, args: Any) -> None:
+        """Ask the autopilot to change mode, arm or disarm, or fly to a point.
+
+        Safe to call from any thread, and never raises: what becomes of the request
+        is published, in the snapshot (control.command) and as events.
         """

@@ -88,6 +88,14 @@ def test_zero_latitude_and_longitude_mean_no_position():
     assert snap["home_distance"]["reason"] == "no position"
 
 
+def test_a_fresh_value_is_one_known_and_not_stale():
+    state = TelemetryState()
+    assert state.fresh("mode", now=0.0) is None  # never received
+    state.set("mode", "RTL", now=10.0)
+    assert state.fresh("mode", now=12.0).value == "RTL"
+    assert state.fresh("mode", now=13.5) is None  # stale after 3 s
+
+
 def test_only_registered_values_can_be_set():
     with pytest.raises(KeyError):
         TelemetryState().set("airpseed", 1.0, now=0.0)

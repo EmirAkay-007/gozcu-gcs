@@ -5,12 +5,14 @@
 
 import { AttitudeIndicator } from "./attitude.js";
 import { ConnectionBox } from "./connection.js";
+import { FlyHere } from "./flyto.js";
 import { GozcuPanel } from "./gozcu.js";
 import { setUpLayout } from "./layout.js";
 import { EventLog } from "./log.js";
 import { MapPanel } from "./map.js";
 import { TopBar } from "./topbar.js";
 import { Transport, stationUrl } from "./transport.js";
+import { VehiclePanel } from "./vehicle.js";
 import { VideoPanel } from "./video.js";
 import { TelemetryPanel } from "./widgets.js";
 
@@ -31,6 +33,25 @@ const gozcu = new GozcuPanel(byId("gozcu"), (command) =>
   station.send({ type: "gozcu_command", ...command }),
 );
 const station = new Transport();
+const sendVehicle = (request) => station.send({ type: "vehicle_command", ...request });
+const vehicle = new VehiclePanel({
+  mode: byId("control-mode"),
+  set: byId("control-set"),
+  arm: byId("control-arm"),
+  disarm: byId("control-disarm"),
+  line: byId("control-line"),
+  send: sendVehicle,
+});
+const flyHere = new FlyHere({
+  map,
+  panel: byId("fly-here"),
+  place: byId("fly-here-place"),
+  altitude: byId("fly-here-alt"),
+  button: byId("fly-here-go"),
+  close: byId("fly-here-close"),
+  line: byId("fly-here-line"),
+  send: sendVehicle,
+});
 const connection = new ConnectionBox({
   input: byId("connection-input"),
   options: byId("connection-options"),
@@ -73,7 +94,9 @@ station
     eventLog.clear(); // the server replays its recent events next
     each([
       ["telemetry", () => telemetry.build(hello.fields)],
+      ["vehicle", () => vehicle.configure(hello.control)],
       ["map", () => map.configure(hello.map)],
+      ["map", () => flyHere.configure(hello.control)],
       ["video", () => video.configure(hello.video)],
     ]);
   })
@@ -83,8 +106,10 @@ station
       ["connection", () => connection.update(snapshot.link)],
       ["telemetry", () => telemetry.update(snapshot)],
       ["attitude", () => attitude.update(snapshot.fields)],
+      ["vehicle", () => vehicle.update(snapshot)],
       ["map", () => map.update(snapshot.fields)],
       ["map", () => map.showTracks(snapshot.gozcu)],
+      ["map", () => flyHere.update(snapshot)],
       ["Gözcü", () => gozcu.update(snapshot.gozcu)],
       ["video", () => video.setGozcu(snapshot.gozcu)],
     ]),
@@ -99,7 +124,9 @@ station
         ["connection", () => connection.showOffline()],
         ["telemetry", () => telemetry.showOffline()],
         ["attitude", () => attitude.showOffline()],
+        ["vehicle", () => vehicle.showOffline()],
         ["map", () => map.showOffline()],
+        ["map", () => flyHere.showOffline()],
         ["video", () => video.showOffline()],
         ["Gözcü", () => gozcu.showOffline()],
       ]);

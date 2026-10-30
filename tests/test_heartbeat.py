@@ -1,6 +1,6 @@
 import pytest
 
-from gcs.heartbeat import is_armed, is_vehicle_heartbeat, mode_name
+from gcs.heartbeat import is_armed, is_plane, is_vehicle_heartbeat, mode_name
 from gcs.mav import mavlink
 
 CUSTOM = mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
@@ -55,6 +55,12 @@ def test_arm_state_comes_from_the_safety_flag():
 )
 def test_mode_names_follow_the_vehicle_type(mav_type, mode, expected):
     assert mode_name(heartbeat(mav_type, mode=mode)) == expected
+
+
+def test_planes_and_quadplanes_number_their_modes_as_arduplane():
+    assert is_plane(heartbeat(mavlink.MAV_TYPE_FIXED_WING))
+    assert is_plane(heartbeat(mavlink.MAV_TYPE_VTOL_TILTROTOR))
+    assert not is_plane(heartbeat(mavlink.MAV_TYPE_QUADROTOR))  # Copter: RTL is 6, not 11
 
 
 def test_mode_is_unknown_without_the_custom_mode_flag():

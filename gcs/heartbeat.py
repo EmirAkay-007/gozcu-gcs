@@ -18,11 +18,18 @@ NON_VEHICLE_TYPES = frozenset(
         mavlink.MAV_TYPE_CAMERA,
     }
 )
+PLANE_MODES = mavutil.mode_mapping_bynumber(mavlink.MAV_TYPE_FIXED_WING)
 
 
 def is_vehicle_heartbeat(msg: mavlink.MAVLink_heartbeat_message) -> bool:
     """True if the HEARTBEAT comes from a flight controller."""
     return msg.autopilot != mavlink.MAV_AUTOPILOT_INVALID and msg.type not in NON_VEHICLE_TYPES
+
+
+def is_plane(msg: mavlink.MAVLink_heartbeat_message) -> bool:
+    """True if a vehicle HEARTBEAT numbers its modes as ArduPlane does (fixed wings
+    and quadplanes), the numbers the ground station's mode commands use."""
+    return mavutil.mode_mapping_bynumber(msg.type) == PLANE_MODES
 
 
 def is_armed(msg: mavlink.MAVLink_heartbeat_message) -> bool:

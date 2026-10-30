@@ -58,13 +58,31 @@ its range.
 The operator can change Gözcü's mode, approve or reject a proposal in CONFIRM mode, and
 run or pause perception. Each of these buttons has to be held down for 0.6 s, so a stray
 click sends nothing; a decision names the proposal it answers, so a late one is refused
-rather than misapplied. Commands go only to Gözcü, never to the autopilot, one at a time,
-and are sent again if unanswered; their outcome shows under the mode buttons and in the
-event log. The MCU decides: the ground station only asks.
+rather than misapplied. These commands go only to Gözcü, never to the autopilot, one at a
+time, and are sent again if unanswered; their outcome shows under the mode buttons and in
+the event log. The MCU decides: the ground station only asks.
 
 Without the board, `tools/fake_gozcu.py` plays the MCU: it connects to SITL's second serial
 port as Gözcü would and follows the contract, with scenarios from a full encounter to safe
 mode (`--help` lists them). The MCU's own output can be compared with it.
+
+## Commands to the autopilot
+
+Under the attitude indicator, the operator can set the flight mode (FBWA, CRUISE, LOITER,
+RTL, AUTO, TAKEOFF, GUIDED or AUTOLAND; MANUAL is left to the RC transmitter) and arm or
+disarm. A right-click on the map opens "Fly here": the vehicle switches to GUIDED and flies
+to that point, at the altitude given above home (20 to 500 m; the vehicle's own altitude
+is offered, but at least 50 m). The point stays marked while the vehicle goes there.
+As with Gözcü, every button has to be held, one command goes at a time and is sent again
+if unanswered, and the outcome shows under the buttons and in the event log.
+
+The autopilot checks these commands as it checks any ground station's: it runs its
+pre-arm checks before arming and says in its own messages why it refused, and ArduPlane
+refuses a disarm from the ground while flying. Nothing is forced. The station sends none
+of them while Gözcü avoids or one of its proposals waits for an answer, so nothing from
+the ground works against an avoidance manoeuvre; the RC transmitter remains the way to
+take over. The flight modes are sent by ArduPlane's numbers, so these commands are offered
+only for ArduPlane (fixed wings and quadplanes).
 
 ## Map
 
