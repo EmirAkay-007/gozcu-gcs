@@ -23,7 +23,9 @@ const eventLog = new EventLog({
   search: byId("log-search"),
 });
 const map = new MapPanel(byId("map"), byId("map-follow"), byId("map-notice"));
-const gozcu = new GozcuPanel(byId("gozcu"));
+const gozcu = new GozcuPanel(byId("gozcu"), (command) =>
+  station.send({ type: "gozcu_command", ...command }),
+);
 const station = new Transport();
 const video = new VideoPanel({
   canvas: byId("video-canvas"),

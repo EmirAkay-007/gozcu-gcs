@@ -17,6 +17,8 @@ dependencies = [
     "starlette==1.10.0",
     "uvicorn==0.54.0",
     "websockets==17.3",  # uvicorn's WebSocket support
+    # Serial links (a telemetry radio, the MCU's UART): pymavlink imports it only then.
+    "pyserial==3.5",
 ]
 
 [project.optional-dependencies]
@@ -38,5 +40,6 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tools"]  # the tests also check tools/fake_gozcu.py
 # A warning, such as an exception that killed a thread, fails the run.
 filterwarnings = ["error"]

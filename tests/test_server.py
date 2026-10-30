@@ -28,12 +28,16 @@ class FakeSource:
     def __init__(self, config, publish):
         self.publish = publish
         self.running = False
+        self.commands = []
 
     def start(self):
         self.running = True
 
     def stop(self):
         self.running = False
+
+    def gozcu_command(self, action, value, proposal=0):
+        self.commands.append((action, value, proposal))
 
 
 class FakeVideo:
@@ -181,6 +185,15 @@ def test_a_browser_can_start_and_stop_recording_the_video():
         ws.send_json({"type": "video_recording", "on": False})
         wait_until(lambda: len(videos[0].recording_requests) == 2)
     assert videos[0].recording_requests == [True, False]
+
+
+def test_a_gozcu_command_from_a_browser_reaches_the_source():
+    app, sources, _ = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "gozcu_command", "action": "decide", "value": 1, "proposal": 7})
+        ws.send_json({"type": "gozcu_command", "action": "mode", "value": 2})
+        wait_until(lambda: len(sources[0].commands) == 2)
+    assert sources[0].commands == [("decide", 1, 7), ("mode", 2, 0)]  # checked by the source
 
 
 @pytest.mark.parametrize("message", ["not json", "[1, 2]", '{"no": "type"}', '{"type": "launch"}'])

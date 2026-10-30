@@ -15,6 +15,7 @@ python3 -m venv .venv
 .venv/bin/python -E -m pytest                  # unit tests
 .venv/bin/python -E -m ruff check .            # lint
 .venv/bin/python -E tools/link_check.py        # check the MAVLink link to SITL (tcp:127.0.0.1:5762)
+.venv/bin/python -E tools/fake_gozcu.py        # play Gözcü's MCU on SITL's second port (tcp:127.0.0.1:5763)
 ```
 
 `-E` makes Python ignore `PYTHONPATH`. Where ROS is sourced, that variable points at ROS's
@@ -32,7 +33,10 @@ through nvm), pytest also parses every script in `web/js` and runs the unit test
 ```
 
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
-`--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`.
+`--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`. Over a telemetry radio
+plugged in by USB: `--conn /dev/ttyUSB0,57600` (its port and baud rate; on Linux the user
+must be in the `dialout` group). Gözcü's reports reach the ground station on any of these
+links, because the autopilot passes them on from the port the MCU is connected to.
 
 ## Gözcü
 
@@ -41,6 +45,17 @@ The right-hand panel shows what Gözcü, MAVLink component 191 of the vehicle, r
 proposed manoeuvre and what became of it, up to three tracks, and Gözcü's health. Changes
 of state, mode, switch and faults also go to the event log, and Gözcü's values and tracks
 into the session recording.
+
+The operator can change Gözcü's mode, approve or reject a proposal in CONFIRM mode, and
+run or pause perception. Each of these buttons has to be held down for 0.6 s, so a stray
+click sends nothing; a decision names the proposal it answers, so a late one is refused
+rather than misapplied. Commands go only to Gözcü, never to the autopilot, one at a time,
+and are sent again if unanswered; their outcome shows under the mode buttons and in the
+event log. The MCU decides: the ground station only asks.
+
+Without the board, `tools/fake_gozcu.py` plays the MCU: it connects to SITL's second serial
+port as Gözcü would and follows the contract, with scenarios from a full encounter to safe
+mode (`--help` lists them). The MCU's own output can be compared with it.
 
 ## Map
 

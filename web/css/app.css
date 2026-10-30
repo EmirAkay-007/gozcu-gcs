@@ -703,6 +703,75 @@ input:focus-visible {
   color: var(--caution);
 }
 
+/* Press-and-hold buttons (js/hold.js): they fill up while held */
+
+.hold {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.hold::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: 0;
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+.hold.is-holding::before {
+  width: 100%;
+  transition: width var(--hold-ms, 600ms) linear;
+}
+
+.segmented button.is-pending {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.decision {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.decision[hidden] {
+  display: none;
+}
+
+.decision button {
+  padding: 6px;
+  font-weight: 700;
+}
+
+.decision .hint {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-stale);
+}
+
+.command-line {
+  min-height: 1.35em;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.command-line[data-level="warn"] {
+  color: var(--caution);
+}
+
+button.small {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
 .health {
   display: grid;
   grid-template-columns: 1fr auto;

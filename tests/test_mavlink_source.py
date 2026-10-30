@@ -63,6 +63,8 @@ class FakeAutopilot:
         self._reboot = threading.Event()
         self._texts = queue.SimpleQueue()  # STATUSTEXTs waiting to be sent
         self._gozcu_sends = queue.SimpleQueue()  # what to send as the Gözcü component
+        self.gozcu_commands = []  # MAV_CMD_USER_1 commands received
+        self.gozcu_answer = "accept"  # or "deny", "silent", "autopilot"
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -139,23 +141,32 @@ class FakeAutopilot:
                 if not data:
                     return
                 for msg in parser.parse_buffer(data) or []:
-                    self._answer(mav, msg)
+                    self._answer(mav, gozcu, msg)
             except TimeoutError:
                 continue
             except OSError:  # the GCS went away
                 return
 
-    def _answer(self, mav, msg):
-        if msg.get_type() == "COMMAND_LONG" and msg.command == mavlink.MAV_CMD_SET_MESSAGE_INTERVAL:
+    def _answer(self, mav, gozcu, msg):
+        if msg.get_type() != "COMMAND_LONG":
+            return
+        if msg.command == mavlink.MAV_CMD_SET_MESSAGE_INTERVAL:
             self.requested.append(int(msg.param1))
-            mav.command_ack_send(
-                msg.command,
-                mavlink.MAV_RESULT_ACCEPTED,
-                0,
-                0,
-                msg.get_srcSystem(),
-                msg.get_srcComponent(),
-            )
+            result, reason, answerer = mavlink.MAV_RESULT_ACCEPTED, 0, mav
+        elif msg.command == mavlink.MAV_CMD_USER_1:
+            self.gozcu_commands.append(msg)
+            if self.gozcu_answer == "silent":
+                return
+            result, reason, answerer = {
+                "accept": (mavlink.MAV_RESULT_ACCEPTED, 0, gozcu),
+                "deny": (mavlink.MAV_RESULT_DENIED, 1, gozcu),  # switch on INHIBIT
+                "autopilot": (mavlink.MAV_RESULT_UNSUPPORTED, 0, mav),  # no route to Gözcü
+            }[self.gozcu_answer]
+        else:
+            return
+        answerer.command_ack_send(
+            msg.command, result, 0, reason, msg.get_srcSystem(), msg.get_srcComponent()
+        )
 
 
 @pytest.fixture
@@ -260,6 +271,60 @@ def test_gozcu_reports_reach_the_snapshot_apart_from_the_vehicle(autopilot, run_
     assert latest["fields"]["link_loss"]["value"] == 0.0
     assert latest["fields"]["mode"]["value"] == "FBWA"  # the vehicle is still the autopilot
     assert "Gözcü heard" in events(published)
+
+
+def gozcu_heartbeat(mav):
+    mav.heartbeat_send(mavlink.MAV_TYPE_ONBOARD_CONTROLLER, mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 4)
+
+
+def command_state(published):
+    command = snapshots(published)[-1]["gozcu"]["command"]
+    return None if command is None else command["state"]
+
+
+@pytest.mark.parametrize(
+    ("answer", "state"),
+    [("accept", "ACCEPTED"), ("deny", "DENIED"), ("autopilot", "NO ROUTE")],
+)
+def test_a_gozcu_command_goes_to_its_component_and_its_answer_is_shown(autopilot, answer, state):
+    autopilot.gozcu_answer = answer
+    published = []
+    source = MavlinkSource(MavlinkConfig(connection=autopilot.url), published.append)
+    source.start()
+    try:
+        wait_for(lambda: link_state(published) == CONNECTED)
+        autopilot.as_gozcu(gozcu_heartbeat)
+        wait_for(lambda: snapshots(published)[-1]["gozcu"]["present"])
+        source.gozcu_command("mode", 2)
+        wait_for(lambda: command_state(published) == state)
+    finally:
+        source.stop()
+    (sent,) = autopilot.gozcu_commands
+    assert (sent.target_system, sent.target_component) == (1, 191)
+    assert (sent.param1, sent.param2, sent.param3, sent.confirmation) == (0, 2, 0, 0)
+
+
+def test_a_gozcu_command_is_not_sent_before_gozcu_is_heard(autopilot):
+    published = []
+    source = MavlinkSource(MavlinkConfig(connection=autopilot.url), published.append)
+    source.start()
+    try:
+        wait_for(lambda: link_state(published) == CONNECTED)
+        source.gozcu_command("decide", 1, 4)
+        wait_for(lambda: command_state(published) == "NOT SENT")
+    finally:
+        source.stop()
+    assert autopilot.gozcu_commands == []
+    assert "not sent: approve proposal 4 (Gözcü is silent)" in events(published)
+
+
+def test_a_serial_port_that_is_not_there_is_reported_and_tried_again(run_source):
+    published = run_source(connection="/dev/ttyGOZCU_TEST_NONE,57600")  # a telemetry radio
+    report = "cannot open /dev/ttyGOZCU_TEST_NONE,57600:"
+    wait_for(lambda: any(text.startswith(report) for text in events(published)))
+    count = len(snapshots(published))
+    wait_for(lambda: len(snapshots(published)) > count + 3)  # the source keeps going
+    assert link_state(published) == CONNECTING
 
 
 def test_a_late_heartbeat_reports_link_lost_without_reconnecting(autopilot, run_source):

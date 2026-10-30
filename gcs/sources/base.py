@@ -7,9 +7,11 @@ quickly without raising, and receives plain, JSON-ready dicts of two kinds:
 
     {"type": "snapshot", "seq": int, "time": float,
      "link": {"state": str, "connection": str, "vehicle": dict | None},
-     "fields": {key: {"value", "text", "reason", "age", "stale", "level"}}}
+     "fields": {key: {"value", "text", "reason", "age", "stale", "level"}},
+     "gozcu": {"heard", "present", "system_status", "fields", "tracks", "command"}}
 
-        about ten times a second: the whole state at once (see gcs.state);
+        about ten times a second: the whole state at once (see gcs.state, and
+        gcs.gozcu and gcs.gozcu_commands for Gözcü's part);
 
     {"type": "event", "time": float, "source": str, "severity": str, "text": str}
 
@@ -18,7 +20,7 @@ quickly without raising, and receives plain, JSON-ready dicts of two kinds:
         seconds since the epoch.
 """
 
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class TelemetrySource(Protocol):
@@ -27,3 +29,10 @@ class TelemetrySource(Protocol):
 
     def stop(self) -> None:
         """Stop producing and release the link."""
+
+    def gozcu_command(self, action: Any, value: Any, proposal: Any = 0) -> None:
+        """Ask Gözcü to change mode, decide on a proposal, or run or pause perception.
+
+        Safe to call from any thread, and never raises: what becomes of the request
+        is published, in the snapshot (gozcu.command) and as events.
+        """

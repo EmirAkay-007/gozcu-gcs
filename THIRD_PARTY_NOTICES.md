@@ -47,6 +47,7 @@ What the station needs to run, with the versions pinned in `pyproject.toml`:
 | starlette 1.10.0 | BSD-3-Clause |
 | uvicorn 0.54.0 | BSD-3-Clause |
 | websockets 17.3 | BSD-3-Clause |
+| pyserial 3.5 | BSD |
 
 Pulled in by those: annotated-doc, annotated-types, anyio, fastcrc, h11, pydantic,
 pydantic-core and typing-inspection (MIT); click, idna and lxml (BSD-3-Clause);

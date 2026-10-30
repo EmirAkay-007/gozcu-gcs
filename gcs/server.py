@@ -233,6 +233,7 @@ def create_app(
         publish, recorder = start_recording(config, publish)
         app.state.publish = publish
         source = source_factory(config.mavlink, publish)
+        app.state.source = source
         video = None
         if config.video.enabled:
             video = video_factory(
@@ -321,9 +322,13 @@ async def _until_closed(
 
 
 async def _request(app: FastAPI, text: str) -> None:
-    """A request from a browser. The only one so far: {"type": "video_recording", "on": bool}.
+    """A request from a browser:
 
-    The outcome reaches every browser through the events and the video status.
+        {"type": "video_recording", "on": bool}
+        {"type": "gozcu_command", "action": str, "value": int, "proposal": int}
+
+    The outcome reaches every browser through the events, the video status and the
+    snapshot; the source checks a Gözcü command before sending it.
     """
     try:
         request = json.loads(text)
@@ -331,7 +336,10 @@ async def _request(app: FastAPI, text: str) -> None:
     except (ValueError, TypeError, KeyError):
         server_log.warning("ignored a malformed message from a browser: %.80s", text)
         return
-    if kind != "video_recording":
+    if kind == "gozcu_command":
+        action, value = request.get("action"), request.get("value")
+        app.state.source.gozcu_command(action, value, request.get("proposal", 0))
+    elif kind != "video_recording":
         server_log.warning("ignored an unknown request from a browser: %.40s", kind)
     elif app.state.video is None:
         app.state.publish(server_event("WARNING", "cannot record video: video is turned off"))

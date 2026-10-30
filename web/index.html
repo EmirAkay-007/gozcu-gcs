@@ -133,6 +133,11 @@
       <section>
         <h3>Manoeuvre</h3>
         <div class="readout" id="proposal">—</div>
+        <div class="decision" id="decision" hidden>
+          <button type="button" class="hold" id="approve" disabled>APPROVE</button>
+          <button type="button" class="hold" id="reject" disabled>REJECT</button>
+          <span class="hint">Press and hold to answer</span>
+        </div>
       </section>
 
       <section>
@@ -154,18 +159,23 @@
 
       <section>
         <h3>Mode</h3>
-        <div class="segmented" role="group" aria-label="Gözcü mode">
-          <button type="button" data-mode="0" aria-pressed="false" disabled>WARN</button>
-          <button type="button" data-mode="1" aria-pressed="false" disabled>CONFIRM</button>
-          <button type="button" data-mode="2" aria-pressed="false" disabled>AUTO</button>
+        <div class="segmented" role="group" aria-label="Gözcü mode, press and hold to change">
+          <button type="button" class="hold" data-mode="0" aria-pressed="false" disabled>WARN</button>
+          <button type="button" class="hold" data-mode="1" aria-pressed="false" disabled>CONFIRM</button>
+          <button type="button" class="hold" data-mode="2" aria-pressed="false" disabled>AUTO</button>
         </div>
+        <div class="command-line" id="command-line" role="status"></div>
       </section>
 
       <section>
         <dl class="health num">
           <dt title="Read only: the switch on the board decides">ARM / INHIBIT switch</dt>
           <dd data-gozcu-key="switch"></dd>
-          <dt>Perception</dt><dd data-gozcu-key="perception"></dd>
+          <dt>Perception</dt>
+          <dd>
+            <span data-gozcu-key="perception"></span>
+            <button type="button" class="hold small" id="perception-toggle" disabled>PAUSE</button>
+          </dd>
         </dl>
       </section>
 

@@ -199,6 +199,10 @@ class GozcuState:
         for severity, text in self._texts.expire(now):
             self._event(enum_name("MAV_SEVERITY", severity), text)
 
+    def present(self, now: float) -> bool:
+        """Whether Gözcü's heartbeat is recent: only then may commands be sent."""
+        return self._heartbeat_at is not None and now - self._heartbeat_at <= SILENT_AFTER_S
+
     def snapshot(self, now: float) -> dict[str, Any]:
         heartbeat_age = None if self._heartbeat_at is None else now - self._heartbeat_at
         self._values.set("heartbeat_age", heartbeat_age, now, reason="not heard")
@@ -206,7 +210,7 @@ class GozcuState:
         tracks_age = None if received is None else round(now - received, 2)
         return {
             "heard": self._heartbeat_at is not None,
-            "present": heartbeat_age is not None and heartbeat_age <= SILENT_AFTER_S,
+            "present": self.present(now),
             "system_status": None
             if self._system_status is None
             else enum_name("MAV_STATE", self._system_status),
