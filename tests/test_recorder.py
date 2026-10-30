@@ -73,6 +73,27 @@ def test_a_stale_value_is_recorded_as_null(tmp_path):
     assert values["link"] == "CONNECTED"
 
 
+def test_gozcu_values_and_tracks_are_recorded_once_it_is_heard(tmp_path):
+    fresh = {"value": 1, "text": "ADVISORY", "reason": None, "age": 0.2, "stale": False}
+    stale = {"value": 9.5, "text": "9.5", "reason": None, "age": 3.0, "stale": True}
+    track = {"id": 3, "class": "drone", "conf": 0.9, "az": 10.0, "el": -2.0}
+    tracks = {"items": [track], "age": 0.1, "stale": False}
+    silent = {"heard": False, "present": False, "fields": {}, "tracks": tracks}
+    heard = {
+        "heard": True,
+        "present": True,
+        "fields": {"state": fresh | {"level": None}, "fps": stale | {"level": None}},
+        "tracks": tracks,
+    }
+    _, before, after = record_session(
+        tmp_path,
+        [snapshot(0.0, seq=1) | {"gozcu": silent}, snapshot(1.0, seq=2) | {"gozcu": heard}],
+    )
+    assert "gozcu" not in before
+    assert after["gozcu"] == {"state": 1, "fps": None}
+    assert after["tracks"] == [track]
+
+
 def test_sessions_never_overwrite_each_other(tmp_path):
     header = session_header(Config(), now=1_000_000.0)
     settings = RecordingConfig(directory=str(tmp_path))

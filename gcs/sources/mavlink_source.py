@@ -5,6 +5,9 @@ reads, sends our heartbeat and the rate requests, watches the link and opens it
 again when it breaks. What it learns leaves the thread only as plain data,
 through publish() (see gcs.sources.base).
 
+Only the autopilot's messages count as the vehicle's; those of Gözcü, another
+component of the same system, go to GozcuState (gcs.gozcu).
+
 The link state keeps "transport open" apart from "telemetry fresh". In SITL
 lockstep the vehicle's clock follows Gazebo, so a slow or paused simulation
 delays heartbeats without breaking anything: a late heartbeat only reports
@@ -19,6 +22,7 @@ from typing import Any
 
 from gcs.config import MavlinkConfig
 from gcs.fields import MESSAGE_RATES_HZ
+from gcs.gozcu import GozcuState
 from gcs.heartbeat import is_armed, is_vehicle_heartbeat, mode_name
 from gcs.intervals import IntervalRequest, IntervalRequester, send_interval_request
 from gcs.link_stats import PacketLossMeter, RateMeter
@@ -70,6 +74,7 @@ class MavlinkSource:
         self._clock = clock
         self._wall_clock = wall_clock
         self._state = TelemetryState()
+        self._gozcu = GozcuState(lambda severity, text: self._event("gozcu", severity, text))
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="mavlink", daemon=True)
         self._link_state: str | None = None
@@ -127,6 +132,7 @@ class MavlinkSource:
             self._explain_missing_vehicle(now)
             for severity, text in self._statustexts.expire(now):
                 self._event("vehicle", enum_name("MAV_SEVERITY", severity), text)
+            self._gozcu.check(now)
             self._tick(now)
             msg = conn.recv_match(blocking=True, timeout=RECV_TIMEOUT_S)
             if msg is None:
@@ -196,12 +202,15 @@ class MavlinkSource:
         src = (msg.get_srcSystem(), msg.get_srcComponent())
         if self._vehicle is None and kind == "HEARTBEAT" and self._is_autopilot(msg, src):
             self._lock_on(msg, src, now)
+        if self._vehicle is not None and src == (self._vehicle[0], self.config.gozcu_compid):
+            self._gozcu.handle(msg, now)  # Gözcü: the same system as the autopilot
+            return
         if src != self._vehicle:
             if self._vehicle is None and kind == "STATUSTEXT":
                 # The autopilot may speak before its first heartbeat: keep the text
                 # until we know whether it came from the vehicle.
                 self._early_texts.append((src, msg, now))
-            return  # MAVProxy, the companion computer, ...: not the vehicle
+            return  # MAVProxy, other ground stations, ...: not the vehicle
         self._loss.add(msg.get_seq(), now)
         self._rates.add(VEHICLE, now)
         self._state.update(msg, now)
@@ -366,4 +375,5 @@ class MavlinkSource:
                 "vehicle": vehicle,
             },
             "fields": self._state.snapshot(now),
+            "gozcu": self._gozcu.snapshot(now),
         }

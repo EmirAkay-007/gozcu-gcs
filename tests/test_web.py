@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from gcs.fields import FIELDS
+from gcs.gozcu import GOZCU_FIELDS
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -65,6 +66,9 @@ def test_every_field_key_in_the_page_is_registered():
     used = set(re.findall(r'data-key="([^"]+)"', PAGE))
     assert used
     assert used <= {field.key for field in FIELDS}
+    used = set(re.findall(r'data-gozcu-key="([^"]+)"', PAGE))
+    assert used
+    assert used <= {field.key for field in GOZCU_FIELDS}
 
 
 def test_every_script_parses(node):

@@ -21,11 +21,14 @@ class MavlinkConfig:
     target_compid: int = 1
     link_lost_s: float = 3.0
     request_rates: bool = True
+    gozcu_compid: int = 191  # MAV_COMP_ID_ONBOARD_COMPUTER, see docs/message_contract.md
 
     def __post_init__(self) -> None:
-        for name in ("sysid", "compid", "target_compid"):
+        for name in ("sysid", "compid", "target_compid", "gozcu_compid"):
             if not 1 <= getattr(self, name) <= 255:
                 raise ConfigError(f"[mavlink] {name} must be 1..255")
+        if self.gozcu_compid == self.target_compid:
+            raise ConfigError("[mavlink] gozcu_compid must differ from target_compid")
         if self.link_lost_s <= 0:
             raise ConfigError("[mavlink] link_lost_s must be positive")
 

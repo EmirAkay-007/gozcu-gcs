@@ -16,6 +16,9 @@ link_lost_s = 3.0
 # Ask the autopilot for the message rates the GCS needs. Turn this off on a link
 # shared with another ground station that manages the rates itself.
 request_rates = true
+# Component id of Gözcü, on the same system as the autopilot
+# (docs/message_contract.md).
+gozcu_compid = 191
 
 [server]
 host = "127.0.0.1"

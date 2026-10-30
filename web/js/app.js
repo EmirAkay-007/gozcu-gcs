@@ -1,6 +1,7 @@
 // Wires the page together: one transport, every panel listening to it.
 
 import { AttitudeIndicator } from "./attitude.js";
+import { GozcuPanel } from "./gozcu.js";
 import { setUpLayout } from "./layout.js";
 import { EventLog } from "./log.js";
 import { MapPanel } from "./map.js";
@@ -22,6 +23,7 @@ const eventLog = new EventLog({
   search: byId("log-search"),
 });
 const map = new MapPanel(byId("map"), byId("map-follow"), byId("map-notice"));
+const gozcu = new GozcuPanel(byId("gozcu"));
 const station = new Transport();
 const video = new VideoPanel({
   canvas: byId("video-canvas"),
@@ -44,6 +46,7 @@ station
     telemetry.update(snapshot);
     attitude.update(snapshot.fields);
     map.update(snapshot.fields);
+    gozcu.update(snapshot.gozcu);
   })
   .on("video", (status) => video.update(status))
   .on("event", (event) => eventLog.add(event))
@@ -54,6 +57,7 @@ station
       attitude.showOffline();
       map.showOffline();
       video.showOffline();
+      gozcu.showOffline();
     }
     if (wasConnected && !connected) {
       eventLog.add({

@@ -605,6 +605,27 @@ input:focus-visible {
   font-size: 18px;
 }
 
+.safe-mode {
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: var(--alarm);
+  color: var(--on-signal);
+  font-weight: 700;
+  text-align: center;
+}
+
+.safe-mode[hidden] {
+  display: none;
+}
+
+.age-note {
+  margin-left: 6px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-stale);
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -623,8 +644,9 @@ input:focus-visible {
 
 .tracks th,
 .tracks td {
-  padding: 2px 4px;
+  padding: 2px 3px;
   text-align: right;
+  white-space: nowrap; /* a row stays one line; the panel is narrow */
   border-bottom: 1px solid var(--line);
 }
 
@@ -641,6 +663,44 @@ input:focus-visible {
 .tracks .empty {
   text-align: center;
   color: var(--text-stale);
+}
+
+.tracks tbody.is-stale td {
+  color: var(--text-stale);
+}
+
+.tracks tr.is-target td {
+  font-weight: 700;
+}
+
+.tracks tr.is-target[data-level="warn"] td {
+  color: var(--caution);
+}
+
+.tracks tr.is-target[data-level="crit"] td {
+  color: var(--alarm);
+}
+
+.tracks .tag {
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 2px;
+  font: 700 9px var(--font-ui);
+  background: var(--text-dim);
+  color: var(--on-signal);
+  vertical-align: 1px;
+}
+
+.tracks tr[data-level="warn"] .tag {
+  background: var(--caution);
+}
+
+.tracks tr[data-level="crit"] .tag {
+  background: var(--alarm);
+}
+
+.readout[data-level="warn"] {
+  color: var(--caution);
 }
 
 .health {

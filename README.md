@@ -34,6 +34,14 @@ through nvm), pytest also parses every script in `web/js` and runs the unit test
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
 `--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`.
 
+## Gözcü
+
+The right-hand panel shows what Gözcü, MAVLink component 191 of the vehicle, reports as
+[docs/message_contract.md](docs/message_contract.md) defines it: the threat state, a
+proposed manoeuvre and what became of it, up to three tracks, and Gözcü's health. Changes
+of state, mode, switch and faults also go to the event log, and Gözcü's values and tracks
+into the session recording.
+
 ## Map
 
 The map draws OpenStreetMap tiles, so it needs internet. Without it, or with

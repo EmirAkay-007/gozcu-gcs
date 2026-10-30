@@ -122,51 +122,63 @@
     </article>
   </section>
 
-  <aside class="panel" aria-labelledby="gozcu-title">
+  <!-- Elements with data-gozcu-key show that value of snapshot.gozcu.fields (gcs/gozcu.py). -->
+  <aside class="panel" id="gozcu" aria-labelledby="gozcu-title">
     <h2 id="gozcu-title">Gözcü</h2>
     <div class="panel-body gozcu">
       <div class="badge threat" id="threat">NO DATA</div>
+      <div class="safe-mode" id="safe-mode" hidden></div>
 
+      <!-- First after the threat: in CONFIRM mode the operator has seconds to answer. -->
       <section>
-        <h3>Mode</h3>
-        <div class="segmented" role="group" aria-label="Gözcü mode">
-          <button type="button" disabled title="Commands arrive in roadmap step 7">WARN</button>
-          <button type="button" disabled title="Commands arrive in roadmap step 7">CONFIRM</button>
-          <button type="button" disabled title="Commands arrive in roadmap step 7">AUTO</button>
-        </div>
+        <h3>Manoeuvre</h3>
+        <div class="readout" id="proposal">—</div>
       </section>
 
       <section>
-        <h3>ARM / INHIBIT switch</h3>
-        <div class="readout">— (read only: the switch on the board decides)</div>
-      </section>
-
-      <section>
-        <h3>Tracks</h3>
+        <h3>Tracks <span class="age-note" id="tracks-age"></span></h3>
         <table class="tracks num">
           <thead>
-            <tr><th>ID</th><th>Class</th><th>Conf</th><th>Az/El °</th><th>Rate °/s</th><th>px</th><th>τ s</th></tr>
+            <tr>
+              <th>ID</th><th>Class</th><th title="Class confidence">Conf</th>
+              <th title="Azimuth / elevation in the camera image, degrees">Az/El°</th>
+              <th title="Bearing rate, degrees per second">Rate</th>
+              <th title="Apparent size, pixels">px</th><th title="Time to collision, seconds">τ s</th>
+            </tr>
           </thead>
-          <tbody>
+          <tbody id="tracks">
             <tr><td class="empty" colspan="7">No tracks</td></tr>
           </tbody>
         </table>
       </section>
 
       <section>
-        <h3>Manoeuvre</h3>
-        <div class="readout">—</div>
+        <h3>Mode</h3>
+        <div class="segmented" role="group" aria-label="Gözcü mode">
+          <button type="button" data-mode="0" aria-pressed="false" disabled>WARN</button>
+          <button type="button" data-mode="1" aria-pressed="false" disabled>CONFIRM</button>
+          <button type="button" data-mode="2" aria-pressed="false" disabled>AUTO</button>
+        </div>
+      </section>
+
+      <section>
+        <dl class="health num">
+          <dt title="Read only: the switch on the board decides">ARM / INHIBIT switch</dt>
+          <dd data-gozcu-key="switch"></dd>
+          <dt>Perception</dt><dd data-gozcu-key="perception"></dd>
+        </dl>
       </section>
 
       <section>
         <h3>Health</h3>
         <dl class="health num">
-          <dt>MPU heartbeat</dt><dd>—</dd>
-          <dt>Perception age</dt><dd>—</dd>
-          <dt>Perception rate</dt><dd>—</dd>
-          <dt>Camera-to-decision</dt><dd>—</dd>
-          <dt>CPU temperature</dt><dd>—</dd>
-          <dt>Watchdog trips</dt><dd>—</dd>
+          <dt>Gözcü heartbeat</dt><dd data-gozcu-key="heartbeat_age" data-unit="s"></dd>
+          <dt>MPU heartbeat age</dt><dd data-gozcu-key="mpu_age" data-unit="ms"></dd>
+          <dt>Perception age</dt><dd data-gozcu-key="perception_age" data-unit="ms"></dd>
+          <dt>Perception rate</dt><dd data-gozcu-key="fps" data-unit="Hz"></dd>
+          <dt>Camera to decision</dt><dd data-gozcu-key="latency" data-unit="ms"></dd>
+          <dt>CPU temperature</dt><dd data-gozcu-key="temperature" data-unit="°C"></dd>
+          <dt>Watchdog trips</dt><dd data-gozcu-key="watchdog_trips"></dd>
         </dl>
       </section>
     </div>

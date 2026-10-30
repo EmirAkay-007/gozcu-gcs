@@ -62,9 +62,14 @@ class FakeAutopilot:
         self._quiet = threading.Event()
         self._reboot = threading.Event()
         self._texts = queue.SimpleQueue()  # STATUSTEXTs waiting to be sent
+        self._gozcu_sends = queue.SimpleQueue()  # what to send as the Gözcü component
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def as_gozcu(self, send):
+        """Call send(mav) where mav sends as Gözcü, component 191 of this system."""
+        self._gozcu_sends.put(send)
 
     def say(self, text, severity=mavlink.MAV_SEVERITY_WARNING):
         """Send a STATUSTEXT, in chunks if it is longer than one packet."""
@@ -105,6 +110,7 @@ class FakeAutopilot:
     def _serve(self, client):
         client.settimeout(0.1)
         mav = mavlink.MAVLink(SocketFile(client), srcSystem=1, srcComponent=1)
+        gozcu = mavlink.MAVLink(SocketFile(client), srcSystem=1, srcComponent=191)
         parser = mavlink.MAVLink(None)
         boot_ms = 60_000  # up for a minute already
         next_heartbeat = 0.0
@@ -127,6 +133,8 @@ class FakeAutopilot:
                 mav.attitude_send(boot_ms, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0)
                 while not self._texts.empty():
                     send_text(mav, *self._texts.get())
+                while not self._gozcu_sends.empty():
+                    self._gozcu_sends.get()(gozcu)
                 data = client.recv(4096)
                 if not data:
                     return
@@ -222,6 +230,36 @@ def test_locks_on_requests_the_rates_and_reports_values(autopilot, run_source):
     assert latest["fields"]["roll"]["value"] == pytest.approx(math.degrees(0.1))
     assert sorted(autopilot.requested) == ALL_REQUESTS
     assert "vehicle 1/1: FIXED_WING, ARDUPILOTMEGA" in events(published)
+
+
+def test_gozcu_reports_reach_the_snapshot_apart_from_the_vehicle(autopilot, run_source):
+    published = run_source(connection=autopilot.url)
+    wait_for(lambda: link_state(published) == CONNECTED)
+
+    def report(mav):
+        mav.heartbeat_send(
+            mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+            mavlink.MAV_AUTOPILOT_INVALID,
+            0,
+            0,
+            mavlink.MAV_STATE_ACTIVE,
+        )
+        mav.named_value_int_send(5000, b"G_STATE", 1)
+        mav.named_value_int_send(5100, b"T1_ID", 3)
+        mav.named_value_int_send(5100, b"G_NTRK", 1)
+
+    for _ in range(20):  # Gözcü's own sequence numbers must not look like lost vehicle packets
+        autopilot.as_gozcu(report)
+    wait_for(lambda: snapshots(published)[-1]["gozcu"]["tracks"]["items"])
+    time.sleep(0.3)
+    latest = snapshots(published)[-1]
+    gozcu = latest["gozcu"]
+    assert gozcu["present"]
+    assert gozcu["fields"]["state"]["text"] == "ADVISORY"
+    assert gozcu["tracks"]["items"][0]["id"] == 3
+    assert latest["fields"]["link_loss"]["value"] == 0.0
+    assert latest["fields"]["mode"]["value"] == "FBWA"  # the vehicle is still the autopilot
+    assert "Gözcü heard" in events(published)
 
 
 def test_a_late_heartbeat_reports_link_lost_without_reconnecting(autopilot, run_source):

@@ -4,6 +4,7 @@ The file starts with a "session" line (start time, versions, link, the unit of
 every field). After it comes every event as it was published and, at most
 values_hz times a second, a "values" line with the value of every field: null
 where it is unknown or stale, so an old value never passes for a fresh one.
+Once Gözcü has been heard, the line also has its values and its current tracks.
 That is enough to replay a session or measure separations afterwards, at a few
 MB an hour. A thread of its own does the writing, so a slow disk (the UNO Q's
 flash, a USB stick) never holds up the telemetry.
@@ -21,6 +22,7 @@ from typing import Any, TextIO
 
 from gcs.config import Config, RecordingConfig
 from gcs.fields import FIELDS
+from gcs.gozcu import GOZCU_FIELDS
 
 FOLDER_NAME = "Gözcü GCS logs"
 log = logging.getLogger("gcs.recorder")
@@ -58,23 +60,31 @@ def session_header(config: Config, now: float) -> dict[str, Any]:
         "versions": {"gozcu-gcs": version("gozcu-gcs"), "pymavlink": version("pymavlink")},
         "connection": config.mavlink.connection,
         "units": {field.key: field.unit for field in FIELDS},
+        "gozcu_units": {field.key: field.unit for field in GOZCU_FIELDS},
     }
 
 
 def encode_line(item: dict[str, Any]) -> str:
     """One line of the file; a snapshot is reduced to the values of its fields."""
     if item["type"] == "snapshot":
-        item = {
+        line = {
             "type": "values",
             "time": item["time"],
             "seq": item["seq"],
             "link": item["link"]["state"],
-            "values": {
-                key: None if field["stale"] else field["value"]
-                for key, field in item["fields"].items()
-            },
+            "values": _fresh_values(item["fields"]),
         }
+        gozcu = item.get("gozcu")
+        if gozcu is not None and gozcu["heard"]:
+            line["gozcu"] = _fresh_values(gozcu["fields"])
+            tracks = gozcu["tracks"]
+            line["tracks"] = [] if tracks["stale"] else tracks["items"]
+        item = line
     return json.dumps(item, allow_nan=False, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
+def _fresh_values(fields: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {key: None if field["stale"] else field["value"] for key, field in fields.items()}
 
 
 def file_stamp(now: float) -> str:
