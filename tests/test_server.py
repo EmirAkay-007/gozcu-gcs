@@ -39,6 +39,9 @@ class FakeSource:
     def gozcu_command(self, action, value, proposal=0):
         self.commands.append((action, value, proposal))
 
+    def set_connection(self, connection):
+        self.commands.append(("connection", connection))
+
 
 class FakeVideo:
     """Stands in for VideoSource: the test publishes frames through it."""
@@ -132,6 +135,18 @@ def test_the_page_is_served_and_does_not_hide_the_websocket():
     assert "javascript" in script.headers["content-type"]  # ES modules need this type
 
 
+def test_the_browser_checks_its_copy_of_every_file_before_using_it():
+    app, _, _ = make_app()
+    with TestClient(app) as client:
+        first = client.get("/js/app.js")
+        again = client.get("/js/app.js", headers={"if-none-match": first.headers["etag"]})
+        page = client.get("/")
+    assert first.headers["cache-control"] == "no-cache"
+    assert again.status_code == 304  # unchanged: nothing sent again
+    assert again.headers["cache-control"] == "no-cache"
+    assert page.headers["cache-control"] == "no-cache"
+
+
 def test_a_session_is_recorded_to_a_file(tmp_path):
     app, sources, videos = make_app(RecordingConfig(directory=str(tmp_path)))
     with TestClient(app):
@@ -195,6 +210,34 @@ def test_a_gozcu_command_from_a_browser_reaches_the_source():
         ws.send_json({"type": "gozcu_command", "action": "mode", "value": 2})
         wait_until(lambda: len(sources[0].commands) == 2)
     assert sources[0].commands == [("decide", 1, 7), ("mode", 2, 0)]  # checked by the source
+
+
+def test_a_browser_can_change_or_close_the_link():
+    app, sources, _ = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "hello"
+        ws.send_json({"type": "connect", "connection": " /dev/ttyUSB0,57600 "})
+        ws.send_json({"type": "connect", "connection": "/etc/passwd"})  # not a link
+        refused = ws.receive_json()
+        ws.send_json({"type": "disconnect"})
+        wait_until(lambda: len(sources[0].commands) == 2)
+    assert sources[0].commands == [("connection", "/dev/ttyUSB0,57600"), ("connection", None)]
+    assert refused["severity"] == "WARNING"
+    assert refused["text"].startswith("cannot connect: '/etc/passwd' is not a connection")
+
+
+def test_a_browser_can_ask_which_serial_ports_there_are(monkeypatch):
+    from gcs import server
+
+    ports = [{"device": "/dev/ttyUSB0", "description": "CP2102"}]
+    monkeypatch.setattr(server, "serial_ports", lambda: ports)
+    app, _, _ = make_app()
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "hello"
+        ws.send_json({"type": "list_ports"})
+        answer = ws.receive_json()
+    assert answer["type"] == "ports"
+    assert answer["ports"] == ports
 
 
 @pytest.mark.parametrize("message", ["not json", "[1, 2]", '{"no": "type"}', '{"type": "launch"}'])

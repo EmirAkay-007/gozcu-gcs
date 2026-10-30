@@ -60,9 +60,15 @@
 
   <div class="spacer"></div>
 
-  <div class="tb-item">
-    <span class="label">Connection</span>
-    <span class="value num sub" id="connection">—</span>
+  <div class="tb-item connection">
+    <label class="label" for="connection-input">Connection</label>
+    <span class="value">
+      <input type="text" class="num" id="connection-input" list="connection-options"
+             spellcheck="false" autocomplete="off" placeholder="tcp:127.0.0.1:5762">
+      <datalist id="connection-options"></datalist>
+      <button type="button" class="hold small" id="connection-button" disabled
+              title="Press and hold: changing or closing a working link drops the telemetry">Connect</button>
+    </span>
   </div>
 
   <div class="tb-item">

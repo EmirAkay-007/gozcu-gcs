@@ -30,6 +30,10 @@ class TelemetrySource(Protocol):
     def stop(self) -> None:
         """Stop producing and release the link."""
 
+    def set_connection(self, connection: str | None) -> None:
+        """Close the link and open this one instead, or none (DISCONNECTED). Safe to call
+        from any thread; the caller has checked the string."""
+
     def gozcu_command(self, action: Any, value: Any, proposal: Any = 0) -> None:
         """Ask Gözcü to change mode, decide on a proposal, or run or pause perception.
 

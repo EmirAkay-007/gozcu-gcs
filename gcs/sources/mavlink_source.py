@@ -36,6 +36,7 @@ CONNECTING = "CONNECTING"  # no transport: opening it, or waiting to try again
 NO_VEHICLE = "NO_VEHICLE"  # transport open, no autopilot heartbeat yet
 CONNECTED = "CONNECTED"  # autopilot heartbeat younger than link_lost_s
 LINK_LOST = "LINK_LOST"  # autopilot seen, but its last heartbeat is older than link_lost_s
+DISCONNECTED = "DISCONNECTED"  # the operator closed the link
 
 HEARTBEAT_PERIOD_S = 1.0
 SNAPSHOT_PERIOD_S = 0.1  # the browser refreshes at 10 Hz
@@ -81,6 +82,9 @@ class MavlinkSource:
         )
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="mavlink", daemon=True)
+        self._connection: str | None = config.connection  # None: closed by the operator
+        self._wanted: str | None = config.connection
+        self._changed = threading.Event()  # the operator asked for another connection
         self._link_state: str | None = None
         self._last_error: str | None = None
         self._seq = 0
@@ -99,16 +103,30 @@ class MavlinkSource:
         """Ask Gözcü for something (see gcs.gozcu_commands); safe to call from any thread."""
         self._commands.request(action, value, proposal)
 
+    def set_connection(self, connection: str | None) -> None:
+        """Close the link and open this one instead, or none; safe from any thread.
+        The caller checks the string (gcs.mav.check_connection)."""
+        self._wanted = connection
+        self._changed.set()
+
     # The thread's main loops
 
     def _run(self) -> None:
         retry_s = RETRY_MIN_S
         while not self._stop.is_set():
+            if self._changed.is_set():
+                self._take_new_connection()
+                retry_s = RETRY_MIN_S
+            url = self._connection
+            if url is None:
+                self._set_link_state(DISCONNECTED)
+                self._idle(None)  # until the operator chooses a connection
+                continue
             self._set_link_state(CONNECTING)
             try:
-                conn = self._connect(self.config.connection, self.config.sysid, self.config.compid)
+                conn = self._connect(url, self.config.sysid, self.config.compid)
             except Exception as exc:  # whatever stops it opening, say so and try again
-                self._report_error(f"cannot open {self.config.connection}: {exc}")
+                self._report_error(f"cannot open {url}: {exc}")
                 self._idle(retry_s)
                 retry_s = min(retry_s * 2, RETRY_MAX_S)
                 continue
@@ -129,7 +147,7 @@ class MavlinkSource:
         self._begin_session(conn)
         self._set_link_state(NO_VEHICLE)
         next_heartbeat = self._clock()
-        while not self._stop.is_set():
+        while not (self._stop.is_set() or self._changed.is_set()):
             now = self._clock()
             if now >= next_heartbeat:
                 self._send_heartbeat()
@@ -152,15 +170,25 @@ class MavlinkSource:
             except Exception as exc:  # one bad message must not stop the telemetry
                 self._report_error(f"cannot handle {msg.get_type()}: {exc!r}")
 
-    def _idle(self, seconds: float) -> None:
-        """Wait before retrying, but keep publishing snapshots so the browser sees why."""
-        deadline = self._clock() + seconds
-        while not self._stop.is_set():
+    def _idle(self, seconds: float | None) -> None:
+        """Wait before retrying (None: until the operator chooses a connection), but keep
+        publishing snapshots so the browser sees why. A new connection ends the wait."""
+        deadline = None if seconds is None else self._clock() + seconds
+        while not (self._stop.is_set() or self._changed.is_set()):
             now = self._clock()
-            if now >= deadline:
+            if deadline is not None and now >= deadline:
                 return
             self._tick(now)
-            self._stop.wait(max(0.0, min(self._next_snapshot, deadline) - self._clock()))
+            wake = self._next_snapshot if deadline is None else min(self._next_snapshot, deadline)
+            self._stop.wait(max(0.0, wake - self._clock()))
+
+    def _take_new_connection(self) -> None:
+        self._changed.clear()
+        self._connection = self._wanted
+        self._link_state = None  # announce the next state, even if it is the same as before
+        self._last_error = None
+        if self._connection is None:
+            self._event("link", "NOTICE", "link closed by the operator")
 
     def _tick(self, now: float) -> None:
         self._commands.poll(now, self._gozcu_unreachable(now))
@@ -332,7 +360,7 @@ class MavlinkSource:
         if now - self._session_started < NO_VEHICLE_HINT_S:
             return
         self._hint_given = True
-        where = self.config.connection
+        where = self._connection
         if self._messages:
             text = f"MAVLink traffic on {where}, but no heartbeat from autopilot component "
             text += str(self.config.target_compid)
@@ -358,16 +386,16 @@ class MavlinkSource:
             return
         previous, self._link_state = self._link_state, state
         if state == CONNECTING:
-            self._event("link", "INFO", f"connecting to {self.config.connection}")
+            self._event("link", "INFO", f"connecting to {self._connection}")
         elif state == NO_VEHICLE:
             self._event(
-                "link", "INFO", f"connected to {self.config.connection}, waiting for the autopilot"
+                "link", "INFO", f"connected to {self._connection}, waiting for the autopilot"
             )
         elif state == LINK_LOST:
             self._event(
                 "link", "WARNING", f"no autopilot heartbeat for {self.config.link_lost_s:g} s"
             )
-        elif previous == LINK_LOST:
+        elif state == CONNECTED and previous == LINK_LOST:
             self._event("link", "INFO", "autopilot heartbeat back")
 
     def _report_error(self, text: str) -> None:
@@ -409,7 +437,7 @@ class MavlinkSource:
             "time": self._wall_clock(),
             "link": {
                 "state": self._link_state,
-                "connection": self.config.connection,
+                "connection": self._connection,
                 "vehicle": vehicle,
             },
             "fields": self._state.snapshot(now),

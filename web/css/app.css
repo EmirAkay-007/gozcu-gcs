@@ -98,7 +98,8 @@ button[aria-pressed="true"] {
 }
 
 select,
-input[type="search"] {
+input[type="search"],
+input[type="text"] {
   font: inherit;
   font-size: 12px;
   color: var(--text);
@@ -244,6 +245,10 @@ input:focus-visible {
 
 .spacer {
   flex: 1;
+}
+
+.connection input {
+  width: 15rem;
 }
 
 .armed.is-armed .v {

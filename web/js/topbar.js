@@ -8,6 +8,7 @@ const LINK_STATES = {
   NO_VEHICLE: { text: "NO VEHICLE", level: "warn" },
   CONNECTING: { text: "CONNECTING", level: "warn" },
   LINK_LOST: { text: "LINK LOST", level: "crit" },
+  DISCONNECTED: { text: "DISCONNECTED", level: "" }, // closed by the operator
 };
 const SERVER_OFFLINE = { text: "GCS OFFLINE", level: "crit" };
 
@@ -23,7 +24,6 @@ export class TopBar {
   #linkState;
   #vehicle;
   #armed;
-  #connection;
   #clock;
 
   constructor(root) {
@@ -31,7 +31,6 @@ export class TopBar {
     this.#linkState = root.querySelector("#link-state");
     this.#vehicle = root.querySelector("#vehicle");
     this.#armed = root.querySelector("#armed");
-    this.#connection = root.querySelector("#connection");
     this.#clock = root.querySelector("#clock");
     for (const element of this.#fields) showField(element, WAITING);
     this.#showTime();
@@ -43,7 +42,6 @@ export class TopBar {
     this.#vehicle.textContent = link.vehicle
       ? `${link.vehicle.type} ${link.vehicle.sysid}/${link.vehicle.compid}`
       : "—";
-    this.#connection.textContent = link.connection;
     for (const element of this.#fields) {
       const field = fields[element.dataset.key];
       if (field) showField(element, field);

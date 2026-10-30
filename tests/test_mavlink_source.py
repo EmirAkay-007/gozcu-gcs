@@ -16,6 +16,7 @@ from gcs.sources import mavlink_source
 from gcs.sources.mavlink_source import (
     CONNECTED,
     CONNECTING,
+    DISCONNECTED,
     LINK_LOST,
     NO_VEHICLE,
     MavlinkSource,
@@ -316,6 +317,35 @@ def test_a_gozcu_command_is_not_sent_before_gozcu_is_heard(autopilot):
         source.stop()
     assert autopilot.gozcu_commands == []
     assert "not sent: approve proposal 4 (Gözcü is silent)" in events(published)
+
+
+def test_the_operator_can_change_and_close_the_link(autopilot):
+    with socket.socket() as probe:  # a port nobody listens on
+        probe.bind(("127.0.0.1", 0))
+        dead = f"tcp:127.0.0.1:{probe.getsockname()[1]}"
+    published = []
+    source = MavlinkSource(MavlinkConfig(connection=dead), published.append)
+    source.start()
+    try:
+        wait_for(lambda: any(text.startswith(f"cannot open {dead}") for text in events(published)))
+        source.set_connection(autopilot.url)
+        wait_for(lambda: link_state(published) == CONNECTED)
+        assert snapshots(published)[-1]["link"]["connection"] == autopilot.url
+        source.set_connection(None)
+        wait_for(lambda: link_state(published) == DISCONNECTED)
+        latest = snapshots(published)[-1]
+        assert latest["link"]["connection"] is None
+        assert latest["link"]["vehicle"] is None
+        time.sleep(0.5)
+        assert link_state(published) == DISCONNECTED  # and it does not try again by itself
+        source.set_connection(autopilot.url)
+        wait_for(lambda: link_state(published) == CONNECTED)
+    finally:
+        source.stop()
+    assert autopilot.connections == 2
+    texts = events(published)
+    assert "link closed by the operator" in texts
+    assert texts.count(f"connecting to {autopilot.url}") == 2
 
 
 def test_a_serial_port_that_is_not_there_is_reported_and_tried_again(run_source):

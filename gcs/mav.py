@@ -9,6 +9,7 @@ so the rest of the project imports pymavlink only through here.
 """
 
 import os
+import re
 
 os.environ.setdefault("MAVLINK20", "1")
 
@@ -53,6 +54,43 @@ class _TcpLink(mavutil.mavtcp):
             raise
         except OSError as exc:
             raise LinkClosed(f"{self.address}: {exc}") from exc
+
+
+# The connections an operator may choose from the browser: a network link, or a serial
+# port with an optional baud rate. pymavlink would open more (a log file, for one).
+_NETWORK = re.compile(r"(tcp|tcpin|udp|udpin|udpout|udpbcast):([A-Za-z0-9.-]+):(\d{1,5})")
+_SERIAL = re.compile(r"(/dev/[\w.-]+(/[\w.-]+)*|COM\d{1,3})(,\d{3,7})?")
+
+
+def check_connection(text: str) -> str:
+    """text, stripped, if it names a network link or a serial port; else ValueError."""
+    text = text.strip()
+    network = _NETWORK.fullmatch(text)
+    if network and 1 <= int(network[3]) <= 65535:
+        return text
+    if _SERIAL.fullmatch(text) and ".." not in text:
+        return text
+    raise ValueError(
+        f"{text!r} is not a connection: try tcp:HOST:PORT, udpin:0.0.0.0:PORT "
+        "or a serial port such as /dev/ttyUSB0,57600"
+    )
+
+
+_LEGACY_UART = re.compile(r"/dev/ttyS\d+")
+
+
+def serial_ports() -> list[dict[str, str]]:
+    """The serial ports present now (telemetry radios, USB adapters), leaving out the
+    dozens of /dev/ttyS placeholders that Linux keeps with no hardware behind them."""
+    from serial.tools import list_ports  # pyserial, as pymavlink uses for serial links
+
+    ports = [
+        port
+        for port in list_ports.comports()
+        if not (_LEGACY_UART.fullmatch(port.device) and port.hwid == "n/a")
+    ]
+    ports.sort(key=lambda port: port.device)
+    return [{"device": port.device, "description": port.description} for port in ports]
 
 
 def open_link(url: str, sysid: int, compid: int) -> mavutil.mavfile:

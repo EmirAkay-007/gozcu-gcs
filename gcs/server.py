@@ -23,9 +23,12 @@ from typing import Any
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from gcs.config import Config
 from gcs.fields import FIELDS
+from gcs.mav import check_connection, serial_ports
 from gcs.recorder import Recorder, open_recorder, session_header
 from gcs.sources.base import TelemetrySource
 from gcs.sources.mavlink_source import MavlinkSource
@@ -34,7 +37,8 @@ from gcs.video import VideoSource, video_status
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 RECENT_EVENTS = 200  # replayed to a browser that connects later
 CLIENT_EVENT_BACKLOG = 1000  # events a stalled browser may fall behind before the oldest go
-STATES = ("snapshot", "video")  # replaced by newer ones of their kind; the rest are events
+# Replaced by newer ones of their kind; the rest are events.
+STATES = ("snapshot", "video", "ports")
 
 log = logging.getLogger("gcs.events")
 server_log = logging.getLogger("gcs.server")
@@ -153,6 +157,21 @@ class Frames:
 
     def leave(self, viewer: Viewer) -> None:
         self._viewers.discard(viewer)
+
+
+class PageFiles(StaticFiles):
+    """The page's files, which a browser must check before using a copy it keeps.
+
+    Without Cache-Control, browsers guess from a file's age how long their copy stays
+    good, so after an update they may run an old script beside new ones (an old map.js
+    with a new app.js broke the Gözcü panel once). With no-cache they ask every time;
+    an unchanged file costs only a 304 answer.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def hello_message(config: Config) -> dict[str, Any]:
@@ -291,7 +310,7 @@ def create_app(
             frames.leave(viewer)
 
     # Mounted last: Starlette tries routes in order, and "/" would also match /ws.
-    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+    app.mount("/", PageFiles(directory=WEB_DIR, html=True), name="web")
     return app
 
 
@@ -328,9 +347,13 @@ async def _request(app: FastAPI, text: str) -> None:
 
         {"type": "video_recording", "on": bool}
         {"type": "gozcu_command", "action": str, "value": int, "proposal": int}
+        {"type": "connect", "connection": str}
+        {"type": "disconnect"}
+        {"type": "list_ports"}
 
-    The outcome reaches every browser through the events, the video status and the
-    snapshot; the source checks a Gözcü command before sending it.
+    The outcome reaches every browser through the events, the video status, the
+    snapshot and the "ports" message; the source checks a Gözcü command before
+    sending it.
     """
     try:
         request = json.loads(text)
@@ -341,6 +364,18 @@ async def _request(app: FastAPI, text: str) -> None:
     if kind == "gozcu_command":
         action, value = request.get("action"), request.get("value")
         app.state.source.gozcu_command(action, value, request.get("proposal", 0))
+    elif kind == "connect":
+        try:
+            connection = check_connection(str(request.get("connection", "")))
+        except ValueError as exc:
+            app.state.publish(server_event("WARNING", f"cannot connect: {exc}"))
+            return
+        app.state.source.set_connection(connection)
+    elif kind == "disconnect":
+        app.state.source.set_connection(None)
+    elif kind == "list_ports":
+        ports = await asyncio.to_thread(serial_ports)
+        app.state.publish({"type": "ports", "time": time.time(), "ports": ports})
     elif kind != "video_recording":
         server_log.warning("ignored an unknown request from a browser: %.40s", kind)
     elif app.state.video is None:

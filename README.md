@@ -33,7 +33,10 @@ through nvm), pytest also parses every script in `web/js` and runs the unit test
 ```
 
 Settings come from `config.toml` when it exists (start from a copy of `config.example.toml`);
-`--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`. Over a telemetry radio
+`--conn` and `--port` override it, e.g. `--conn udpin:0.0.0.0:14551`. While the station runs,
+the connection box in the top bar changes or closes the link (hold the button: a working
+link's telemetry stops); it suggests the links used before, the serial ports present and
+the usual SITL ports. Over a telemetry radio
 plugged in by USB: `--conn /dev/ttyUSB0,57600` (its port and baud rate; on Linux the user
 must be in the `dialout` group). Gözcü's reports reach the ground station on any of these
 links, because the autopilot passes them on from the port the MCU is connected to.
