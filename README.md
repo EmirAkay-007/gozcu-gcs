@@ -1,9 +1,11 @@
 # Gözcü GCS
 
 Browser-based ground station for **Gözcü**, a visual detect-and-avoid (DAA) system for small UAVs built on the Arduino UNO Q.
-It shows live telemetry, the camera feed, a map and the Gözcü threat state, and records sessions for later analysis.
+It shows live telemetry, the camera feed, a map and the Gözcü threat state, passes the operator's commands to Gözcü and to the autopilot, and records sessions for later analysis.
 
-> **Status:** early development. Milestone 1 targets live telemetry and video from ArduPlane SITL + Gazebo.
+> **Status:** in development. Telemetry, video, the map and the Gözcü panel have been tested
+> against ArduPlane SITL with Gazebo (Gözcü played by `tools/fake_gozcu.py`), the commands to
+> the autopilot so far against a stand-in; nothing yet against the UNO Q board.
 
 ## Development
 
@@ -16,6 +18,7 @@ python3 -m venv .venv
 .venv/bin/python -E -m ruff check .            # lint
 .venv/bin/python -E tools/link_check.py        # check the MAVLink link to SITL (tcp:127.0.0.1:5762)
 .venv/bin/python -E tools/fake_gozcu.py        # play Gözcü's MCU on SITL's second port (tcp:127.0.0.1:5763)
+.venv/bin/python -E tools/ui_check.py          # use the page in a real browser, as an operator does
 ```
 
 `-E` makes Python ignore `PYTHONPATH`. Where ROS is sourced, that variable points at ROS's
@@ -25,6 +28,13 @@ The browser code needs no build step. With Node.js 22.7 or newer installed (on `
 through nvm), pytest also parses every script in `web/js` and runs the unit tests in
 `tests/js`; without Node.js those two tests are skipped. To run only the browser tests:
 `node --test tests/js/*.test.js`. The video tests run a real ffmpeg and are skipped without it.
+
+`tools/ui_check.py` starts the station with stand-ins for the vehicle
+(`tools/fake_autopilot.py`), Gözcü and the camera, opens the page in headless Firefox and
+uses it as an operator would: it holds the buttons, right-clicks the map, types an altitude,
+and lists what worked (in about half a minute; `--screenshots DIR` keeps a few pictures).
+It needs Firefox, and ffmpeg for the video checks. Its ports are free ones, the map loads
+no tiles and nothing is recorded, so it can run beside the simulator and a running station.
 
 ## Running
 
@@ -39,7 +49,24 @@ link's telemetry stops); it suggests the links used before, the serial ports pre
 the usual SITL ports. Over a telemetry radio
 plugged in by USB: `--conn /dev/ttyUSB0,57600` (its port and baud rate; on Linux the user
 must be in the `dialout` group). Gözcü's reports reach the ground station on any of these
-links, because the autopilot passes them on from the port the MCU is connected to.
+links, because the autopilot passes them on from the port the MCU is connected to. After an
+update, restart the station and reload the page.
+
+## Safety
+
+- Every command button has to be held down for 0.6 s: a stray click or tap sends nothing.
+- One command at a time goes to Gözcü, and one to the autopilot. Each is sent again at most
+  twice while unanswered, and what became of it shows beside its buttons and in the event log.
+- Gözcü's commands go only to Gözcü's component: the MCU decides, the station only asks.
+- The station never sends an avoidance manoeuvre; that is Gözcü's job. While Gözcü avoids,
+  or one of its proposals waits for an answer, the operator's commands to the autopilot are
+  held.
+- The autopilot checks every command as it checks any ground station's; nothing is forced.
+  The RC transmitter remains the way to take over.
+- Every coloured state is also written out: amber for caution, red for danger, green only
+  for what is well (link up, clear of conflict).
+- Only the station's own page may use it: a website open in another tab cannot send it
+  commands.
 
 ## Gözcü
 
@@ -116,3 +143,17 @@ Every run is written to a JSON Lines file named after its start time
 (`2026-10-29_13-36-03.jsonl`) in a `Gözcü GCS logs` folder on the desktop, or in the folder
 set as `[recording] directory`. The first line describes the session; then come all events
 and, twice a second, the value of every field (`null` when unknown or stale): about 4 MB an hour.
+
+## When something is wrong
+
+The station says what it knows in the event log and on the panel concerned. The usual cases:
+
+- **NO VEHICLE, "no MAVLink data on tcp:127.0.0.1:5762 yet"**: another program holds that
+  port (SITL serves one client per port), or the simulation is paused. Close the other
+  program, or choose another link in the connection box.
+- **Video NO SIGNAL**: nothing arrives on UDP 5600; Gazebo's camera sends only once its
+  streaming is enabled. **ERROR "another program is receiving it"**: another station or a
+  video player has the port.
+- **"cannot open /dev/ttyUSB0,57600: … Permission denied"**: add the user to the `dialout`
+  group (`sudo usermod -aG dialout $USER`), then log in again.
+- **A command "not sent", or "Commands held: …"**: the reason given is why; see Safety.

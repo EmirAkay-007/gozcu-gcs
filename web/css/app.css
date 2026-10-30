@@ -199,9 +199,9 @@ input:focus-visible {
 
 .topbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap; /* on a narrow screen; from 1366 px on, one line whatever the mode */
   align-items: center;
-  gap: 4px 22px;
+  gap: 4px 16px;
   padding: 6px 12px;
   background: var(--black);
   border-bottom: 1px solid var(--line-strong);
@@ -249,7 +249,7 @@ input:focus-visible {
 }
 
 .connection input {
-  width: 15rem;
+  width: 12rem; /* "/dev/ttyUSB0,57600" with room to spare; a longer one scrolls */
 }
 
 .armed.is-armed .v {
