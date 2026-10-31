@@ -19,17 +19,20 @@ say() {  # to the terminal, or as a notification when there is none (the launche
 }
 
 install_launcher() {
-  local here apps desktop entry
+  local here data apps desktop entry
   here=$(pwd)
   if [[ "$here" == *[\"\`\$\\%]* ]]; then  # a desktop entry would need them escaped twice
     say "No launcher for a folder whose path holds \" \` \$ \\ or %: move it first"
     exit 1
   fi
-  if [ -n "${SNAP_REAL_HOME:-}" ]; then  # in a snap's terminal (VS Code's) XDG_DATA_HOME
-    apps="$SNAP_REAL_HOME/.local/share/applications"  # is the snap's, not the menu's
+  # The user's data folder, which holds the menu and GIO's metadata. In a snap's
+  # terminal (VS Code's), XDG_DATA_HOME and GIO's modules are the snap's own instead.
+  if [ -n "${SNAP_REAL_HOME:-}" ]; then
+    data="$SNAP_REAL_HOME/.local/share"
   else
-    apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    data="${XDG_DATA_HOME:-$HOME/.local/share}"
   fi
+  apps="$data/applications"
   desktop=$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")
   entry="$apps/gozcu-gcs.desktop"
   mkdir -p "$apps"
@@ -50,13 +53,18 @@ EOF
   update-desktop-database "$apps" 2>/dev/null || true
   echo "In the menu: $entry"
   if [ -d "$desktop" ]; then
-    cp "$entry" "$desktop/gozcu-gcs.desktop"
-    chmod +x "$desktop/gozcu-gcs.desktop"
-    # GNOME runs a desktop launcher only once it is trusted. The system's GIO modules
-    # keep that mark; a snap's terminal (VS Code's) points GIO at modules of its own.
-    env -u GIO_MODULE_DIR gio set "$desktop/gozcu-gcs.desktop" metadata::trusted true \
-      2>/dev/null || true
-    echo "On the desktop: $desktop/gozcu-gcs.desktop"
+    local launcher="$desktop/gozcu-gcs.desktop"
+    cp "$entry" "$launcher"
+    chmod +x "$launcher"
+    echo "On the desktop: $launcher"
+    # GNOME's desktop runs a launcher only once it is marked trusted in GIO's metadata;
+    # touched after that, the desktop looks at it again and sees the mark.
+    if env -u GIO_MODULE_DIR XDG_DATA_HOME="$data" \
+      gio set "$launcher" metadata::trusted true 2>/dev/null; then
+      touch "$launcher"
+    else
+      echo "To start it from the desktop, right-click it there and choose Allow Launching"
+    fi
   fi
 }
 
