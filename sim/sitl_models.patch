@@ -1,0 +1,78 @@
+This project's changes to ArduPilot's SITL_Models (https://github.com/ArduPilot/SITL_Models),
+made against its commit 25bc38e: the Mini Talon V-Tail gets a nose camera that streams
+H.264 to UDP 5600, and the runway world the sensors system cameras need, a location near
+Erzurum and a QR target (sim/models). Apply with:
+
+    git -C ~/gz_ws/src/SITL_Models apply "$PWD/sim/sitl_models.patch"
+
+diff --git a/Gazebo/models/mini_talon_vtail/model.sdf b/Gazebo/models/mini_talon_vtail/model.sdf
+index 2ffd908..1ea4aa3 100644
+--- a/Gazebo/models/mini_talon_vtail/model.sdf
++++ b/Gazebo/models/mini_talon_vtail/model.sdf
+@@ -321,6 +321,29 @@
+         <always_on>1</always_on>
+         <update_rate>1</update_rate>
+       </sensor>
++      <sensor name="nose_camera" type="camera">
++        <pose>0.38 0 0 0 0 0</pose>
++        <camera>
++          <horizontal_fov>1.13</horizontal_fov>
++          <image>
++            <width>640</width>
++            <height>480</height>
++          </image>
++          <clip>
++            <near>0.1</near>
++            <far>15000</far>
++          </clip>
++        </camera>
++        <always_on>1</always_on>
++        <update_rate>20</update_rate>
++        <visualize>1</visualize>
++        <plugin name="GstCameraPlugin" filename="GstCameraPlugin">
++          <udp_host>127.0.0.1</udp_host>
++          <udp_port>5600</udp_port>
++          <use_basic_pipeline>false</use_basic_pipeline>
++          <use_cuda>false</use_cuda>
++        </plugin>
++      </sensor>
+     </link>
+ 
+     <link name="main_wheel_link">
+diff --git a/Gazebo/worlds/vtail_runway.sdf b/Gazebo/worlds/vtail_runway.sdf
+index f822ee5..bb8879b 100755
+--- a/Gazebo/worlds/vtail_runway.sdf
++++ b/Gazebo/worlds/vtail_runway.sdf
+@@ -6,6 +6,7 @@
+       <real_time_factor>1</real_time_factor>
+     </physics>
+ 
++<plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+     <plugin filename="gz-sim-physics-system"
+       name="gz::sim::systems::Physics">
+     </plugin>
+@@ -29,9 +30,9 @@
+     </scene>
+ 
+     <spherical_coordinates>
+-      <latitude_deg>-35.363262</latitude_deg>
+-      <longitude_deg>149.165237</longitude_deg>
+-      <elevation>584</elevation>
++      <latitude_deg>39.9035714</latitude_deg>
++      <longitude_deg>41.2375758</longitude_deg>
++      <elevation>1850</elevation>
+       <heading_deg>0</heading_deg>
+       <surface_model>EARTH_WGS84</surface_model>
+     </spherical_coordinates>
+@@ -111,5 +112,11 @@
+       <uri>model://mini_talon_vtail</uri>
+     </include>
+ 
++    <include>
++      <uri>model://qr_2027_kamikaze</uri>
++      <name>qr_2027_kamikaze</name>
++      <pose>-48.019 101.848 0.005 0 0 0</pose>
++    </include>
++
+   </world>
+ </sdf>

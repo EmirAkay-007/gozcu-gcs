@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="qr_2027_kamikaze">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <box><size>2.7619 2.7619 0.01</size></box>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://qr_2027_kamikaze/materials/textures/qr_2027_kamikaze.png</albedo_map>
+              <roughness>1</roughness>
+              <metalness>0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <box><size>2.7619 2.7619 0.01</size></box>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

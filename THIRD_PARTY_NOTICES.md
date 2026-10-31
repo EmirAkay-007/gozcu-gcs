@@ -36,6 +36,20 @@ nothing here links against it. Ubuntu's build is licensed GPL-2.0-or-later as a 
 (its libraries alone are LGPL-2.1-or-later). A package that ships ffmpeg along with the
 station must follow ffmpeg's license.
 
+## Used by the simulation (`sim/`), installed separately
+
+`sim/start_sim.sh` runs programs and models installed as `sim/README.md` says; none of
+them is part of this repository:
+
+- ArduPilot (SITL and `sim_vehicle.py`): GPL-3.0. MAVProxy: GPL-3.0.
+- Gazebo Harmonic: Apache-2.0. ardupilot_gazebo (its plugins, the camera's among them):
+  LGPL-3.0.
+- SITL_Models (the Mini Talon V-Tail and the runway world): its repository states no
+  license. `sim/sitl_models.patch` holds only this project's additions to two of its
+  files, with the few lines around them that a patch needs.
+
+The QR target in `sim/models/qr_2027_kamikaze` was made for this project.
+
 ## Installed by pip (not part of this repository)
 
 What the station needs to run, with the versions pinned in `pyproject.toml`:

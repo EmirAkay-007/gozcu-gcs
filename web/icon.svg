@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Gözcü, "the lookout": an eye in the station's colours (css/app.css) -->
+  <rect width="64" height="64" rx="12" fill="#0B1F4B"/>
+  <path d="M7 32 C17 15 47 15 57 32 C47 49 17 49 7 32 Z" fill="none" stroke="#7FB2FF" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="9" fill="#7FB2FF"/>
+  <circle cx="32" cy="32" r="3.5" fill="#050D1F"/>
+</svg>

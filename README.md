@@ -18,12 +18,22 @@ git clone https://github.com/EmirAkay-007/gozcu-gcs.git && cd gozcu-gcs
 
 The first run installs the station into `.venv` (this needs the internet), and so does the
 first run after `pyproject.toml` changes; every run starts it, connected to SITL at
-`tcp:127.0.0.1:5762`. `./start.sh` takes the options of `python -m gcs`, e.g.
+`tcp:127.0.0.1:5762`. The simulation starts with `sim/start_sim.sh`;
+[sim/README.md](sim/README.md) says what it needs. `./start.sh` takes the options of `python -m gcs`, e.g.
 `./start.sh --conn /dev/ttyUSB0,57600` for a telemetry radio (see Running).
+
+`./start.sh --install-launcher` adds a **Gözcü GCS** launcher to the menu and to the
+desktop. It starts the station, unless one runs already, and opens it in a window of its
+own without an address bar (Chromium's; Firefox's if there is no Chromium); closing the
+window stops the station it started. Having no terminal, it writes what the station says
+to `~/.local/state/gozcu-gcs/station.log` and tells why it could not start in a desktop
+notification. To remove it, delete `gozcu-gcs.desktop` from `~/.local/share/applications`
+and from the desktop.
 
 ## Development
 
-Requires Python 3.12; the simulator side uses ArduPilot SITL with Gazebo.
+Requires Python 3.12. The simulation it is tested against, ArduPlane SITL with Gazebo,
+is described in [sim/README.md](sim/README.md).
 
 ```bash
 python3 -m venv .venv
