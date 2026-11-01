@@ -17,7 +17,8 @@ pymavlink · vanilla JavaScript · Leaflet
 *A simulated encounter: ArduPlane SITL with Gazebo, Gözcü played by the stand-in
 `tools/fake_gozcu.py`. Gözcü is avoiding a drone with an approved climb, the drone is marked
 on the camera picture and drawn on the map as a bearing ray, and the station holds the
-operator's own commands to the autopilot until the avoidance is over.*
+operator's own commands to the autopilot until the avoidance is over. The stand-in makes its
+tracks up, so the marks point at empty sky.*
 
 ## What it does
 
@@ -33,9 +34,9 @@ station is the operator's window into that, and the operator's way to take part 
    threatening track is marked on the video and drawn on the map along its bearing.
 4. **Decide.** In CONFIRM mode Gözcü proposes a manoeuvre, and the operator approves or
    rejects it before a countdown runs out, by holding a button down.
-5. **Stand back.** In AVOID the aircraft's microcontroller flies the manoeuvre. Until it is
-   over, the station holds the operator's own commands to the autopilot, so that nothing
-   from the ground works against it.
+5. **Stand back.** In AVOID, Gözcü's microcontroller has the autopilot fly the manoeuvre.
+   Until it is over, the station holds the operator's own commands to the autopilot, so that
+   nothing from the ground works against it.
 6. **Analyse.** Every session goes to a JSON Lines file, and the camera stream to a video
    file if asked, for the measurement campaign.
 
@@ -59,7 +60,7 @@ flowchart LR
 
 - **Principle: "AI suggests, the real-time core decides"** (run-time assurance, Simplex
   architecture). Perception may be wrong; the microcontroller checks every proposal against
-  the flight envelope and is the only part that commands the autopilot.
+  the flight envelope and is the only part of Gözcü that commands the autopilot.
 - **MPU** (Qualcomm QRB2210, Debian, Python): candidate points from a sky mask and
   morphology, small crops around them, a small YOLO classifier (aircraft, drone, bird,
   background), Kalman tracking, compensation of the vehicle's own rotation, and a threat
@@ -67,7 +68,7 @@ flowchart LR
   collision, τ.
 - **MCU** (STM32U585, Zephyr): a TCAS-like state machine, CLEAR → ADVISORY → AVOID → CLEAR
   OF CONFLICT; flight-envelope checks; two watchdogs ("the processor is silent" and
-  "perception is stale"); the only MAVLink link to the autopilot; and a physical
+  "perception is stale"); Gözcü's only MAVLink link to the autopilot; and a physical
   ARM/INHIBIT switch wired to it.
 - **Modes:** WARN only warns and records. CONFIRM proposes a manoeuvre and waits for the
   operator's approval on the ground station. AUTO carries the manoeuvre out by itself.
@@ -137,8 +138,9 @@ tested without the other.
   size and τ, the target tagged TGT.
 - Gözcü's mode (WARN, CONFIRM, AUTO), perception run and pause, and the ARM/INHIBIT switch,
   read only: the switch on the board has the authority.
-- **Health:** heartbeats, the processor's silence, the age of perception results,
-  perception rate, latency, temperature and watchdog trips, each against its limit.
+- **Health:** Gözcü's heartbeat, how long the processor has been silent, the age of the
+  newest perception result, perception rate, latency, temperature and watchdog trips, each
+  against its limit.
 - A message from Gözcü that the contract does not define, or another contract version, is
   reported once in the event log, for the firmware's developer.
 
@@ -288,7 +290,7 @@ this repository.
   Gözcü's traffic and commands routed by the real autopilot from SITL's second serial port;
   arming, takeoff and AUTOLAND flown from the station.
 
-**What the simulation taught us**
+**What building it taught us**
 - Gazebo's camera sends H.264 in MPEG-TS, not RTP as first assumed, and only after its
   streaming has been switched on.
 - The camera's H.264 header claims 5 fps while about 19 arrive. Left alone, ffmpeg slows
@@ -444,7 +446,7 @@ THIRD_PARTY_NOTICES.md       what comes from elsewhere, and its license
 
 The station says what it knows in the event log and on the panel concerned. The usual cases:
 
-- **"gcs: cannot listen on http://127.0.0.1:8000"**: a station is already running there (it
+- **`gcs: cannot listen on http://127.0.0.1:8000`**: a station is already running there (it
   says so) or another program has the port. Use or stop that one, or start with `--port`.
 - **NO VEHICLE, "no MAVLink data on tcp:127.0.0.1:5762 yet"**: another program holds that
   port (SITL serves one client per port), or the simulation is paused. Close the other
