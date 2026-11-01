@@ -25,6 +25,8 @@ The map loads its background from the tile server set as `[map] tile_url`, by de
 - The tile servers' usage policy applies: <https://operations.osmfoundation.org/policies/tiles/>.
   One station browsing is fine; bulk downloading and offline use are not. Offline use
   needs a tile server of your own.
+- The screenshot in `docs/screenshots/interface.jpg` shows such tiles, with their
+  attribution in the map's corner.
 
 ## Run as a separate program
 
